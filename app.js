@@ -3,7 +3,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const TOUR_TYPES = ["Free tour", "Guide Chester tour"];
 const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const monthLabel = document.getElementById("monthLabel");
@@ -326,12 +325,19 @@ function renderCalendar() {
 function createTourTypeSelect(value) {
   const select = document.createElement("select");
   select.className = "select";
-  const types = tourTypes.length ? tourTypes.map((t) => t.name) : TOUR_TYPES;
-  types.forEach((type) => {
+  if (!tourTypes.length) {
     const option = document.createElement("option");
-    option.value = type;
-    option.textContent = type;
-    if (value === type) option.selected = true;
+    option.value = "";
+    option.textContent = "No tour types";
+    select.appendChild(option);
+    select.disabled = true;
+    return select;
+  }
+  tourTypes.forEach((type) => {
+    const option = document.createElement("option");
+    option.value = type.name;
+    option.textContent = type.name;
+    if (value === type.name) option.selected = true;
     select.appendChild(option);
   });
   return select;
@@ -614,13 +620,17 @@ async function showDetails(iso) {
     endInput.value = addMinutesToTime(startInput.value, 90);
   });
 
-  const typeSelect = createTourTypeSelect(TOUR_TYPES[0]);
+  const typeSelect = createTourTypeSelect(tourTypes[0]?.name);
 
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "primary";
   addBtn.textContent = "Add tour";
   addBtn.addEventListener("click", async () => {
+    if (!tourTypes.length) {
+      alert("Please create a tour type first.");
+      return;
+    }
     if (!startInput.value || !endInput.value) {
       alert("Please fill start and end time.");
       return;

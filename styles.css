@@ -314,10 +314,13 @@ h1 {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 8px;
+  --cell: min(12vw, 64px);
+  grid-auto-rows: var(--cell);
+  min-height: calc(var(--cell) * 6 + 8px * 5);
 }
 
 .day {
-  aspect-ratio: 1 / 1;
+  height: 100%;
   border-radius: 10px;
   border: 1px solid var(--cell-border);
   display: grid;
