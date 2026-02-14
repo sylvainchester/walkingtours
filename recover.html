@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f1d4" />
+    <title>Recover Password - Walking Tours</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app auth-page">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Guide Access</div>
+          <h1>Recover Password</h1>
+        </div>
+        <div class="nav">
+          <a class="ghost" href="sign-in.html">Sign in</a>
+          <a class="ghost" href="sign-up.html">Create account</a>
+        </div>
+      </header>
+
+      <section class="auth" aria-label="Recover password">
+        <div class="auth-fields">
+          <label>
+            <span>Email</span>
+            <input id="authEmail" type="email" placeholder="guide@email.com" autocomplete="email" />
+          </label>
+        </div>
+        <div class="auth-actions">
+          <button id="recoverBtn" class="primary" type="button">Send reset link</button>
+          <a class="ghost" href="sign-in.html">Sign in</a>
+        </div>
+        <div class="auth-status" id="authStatus"></div>
+      </section>
+    </div>
+
+    <script type="module" src="auth.js"></script>
+  </body>
+</html>

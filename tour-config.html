@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f1d4" />
+    <title>Tour Configuration - Walking Tours</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>Tour Configuration</h1>
+        </div>
+        <div class="avatar-menu" id="avatarMenu">
+          <button id="avatarButton" class="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+            <span class="menu-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+          <div class="menu" id="avatarDropdown">
+            <a class="menu-item" href="index.html">Walking tours</a>
+            <a class="menu-item" href="share.html">Share</a>
+            <a class="menu-item" href="availability.html">Availability</a>
+            <a class="menu-item" href="profile.html">Profile</a>
+            <a class="menu-item" href="tour-config.html">Tour configuration</a>
+            <button class="menu-item" id="signOutBtn" type="button">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">New Tour Type</div>
+        <div class="details-content">
+          <div class="form-row">
+            <input id="typeName" class="input" type="text" placeholder="Tour name" />
+            <input id="ticketPrice" class="input" type="number" step="0.01" placeholder="Ticket price" />
+            <input id="commission" class="input" type="number" step="0.01" placeholder="Commission %" />
+            <input id="invoiceOrgName" class="input" type="text" placeholder="Invoice organization name" />
+            <input id="invoiceOrgAddress" class="input" type="text" placeholder="Invoice organization address" />
+            <input id="typeDescription" class="input" type="text" placeholder="Description" />
+            <button id="addType" class="primary" type="button">Add</button>
+          </div>
+          <div id="typeStatus" class="muted"></div>
+        </div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Tour Types</div>
+        <div id="typesList" class="details-content"></div>
+      </section>
+    </div>
+
+    <div id="typeModal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" data-close="true"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="typeModalTitle">
+        <div class="modal-header">
+          <div id="typeModalTitle" class="details-title">Edit Tour Type</div>
+          <button id="typeModalClose" class="ghost" type="button">Close</button>
+        </div>
+        <div id="typeModalBody" class="details-content"></div>
+      </div>
+    </div>
+
+    <script type="module" src="tour-config.js"></script>
+  </body>
+</html>

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f1d4" />
+    <title>Tour Details - Walking Tours</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Tour</div>
+          <h1>Participants</h1>
+        </div>
+        <div class="nav">
+          <a class="ghost" href="index.html">Back</a>
+        </div>
+      </header>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Tour Info</div>
+        <div id="tourInfo" class="details-content"></div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Participants</div>
+        <div id="participants" class="details-content"></div>
+      </section>
+    </div>
+
+    <script type="module" src="tour.js"></script>
+  </body>
+</html>

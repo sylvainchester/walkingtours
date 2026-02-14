@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f1d4" />
+    <title>Walking Tours Schedule</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>WALKING TOURS</h1>
+        </div>
+        <div class="nav">
+          <button id="prevMonth" class="ghost" type="button" aria-label="Previous month">Prev</button>
+          <div class="month" id="monthLabel">Month</div>
+          <button id="nextMonth" class="ghost" type="button" aria-label="Next month">Next</button>
+          <button id="toursToggle" class="ghost" type="button">Only my tours</button>
+        </div>
+        <div class="nav">
+          <label class="label">
+            <span>Show availability of</span>
+            <select id="guideFilter" class="select"></select>
+          </label>
+        </div>
+        <div class="avatar-menu" id="avatarMenu">
+          <button id="avatarButton" class="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+            <span class="menu-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+          <div class="menu" id="avatarDropdown">
+            <a class="menu-item" href="index.html">Walking tours</a>
+            <a class="menu-item" href="share.html" id="shareLink">Share</a>
+            <a class="menu-item" href="availability.html" id="availabilityLink">Availability</a>
+            <a class="menu-item" href="profile.html">Profile</a>
+            <a class="menu-item" href="tour-config.html">Tour configuration</a>
+            <a class="menu-item" href="sign-in.html" id="signInLink">Sign in</a>
+            <a class="menu-item" href="sign-up.html" id="signUpLink">Create account</a>
+            <button class="menu-item" id="signOutBtn" type="button">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="calendar" aria-label="Monthly calendar">
+        <div class="weekdays" id="weekdayRow"></div>
+        <div class="grid" id="calendarGrid"></div>
+      </section>
+
+      <section class="details day-panel" aria-live="polite">
+        <div id="detailsContent" class="details-content">Pick a date to view tour times and notes.</div>
+      </section>
+    </div>
+
+    <div id="tourModal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" data-close="true"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-header">
+          <div id="modalTitle" class="details-title">Tour Details</div>
+          <button id="modalClose" class="ghost" type="button">Close</button>
+        </div>
+        <div id="modalBody" class="details-content"></div>
+      </div>
+    </div>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

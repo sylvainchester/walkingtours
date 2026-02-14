@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f1d4" />
+    <title>Sign In - Walking Tours</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app auth-page">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Guide Access</div>
+          <h1>Sign In</h1>
+        </div>
+        <div class="nav">
+          <a class="ghost" href="sign-up.html">Create account</a>
+          <a class="ghost" href="recover.html">Recover password</a>
+        </div>
+      </header>
+
+      <section class="auth" aria-label="Sign in">
+        <div class="auth-fields">
+          <label>
+            <span>Email</span>
+            <input id="authEmail" type="email" placeholder="guide@email.com" autocomplete="email" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="authPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+          </label>
+        </div>
+        <div class="auth-actions">
+          <button id="signInBtn" class="primary" type="button">Sign in</button>
+          <a class="ghost" href="sign-up.html">Create account</a>
+        </div>
+        <div class="auth-status" id="authStatus"></div>
+      </section>
+    </div>
+
+    <script type="module" src="auth.js"></script>
+  </body>
+</html>

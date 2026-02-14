@@ -1,0 +1,16 @@
+{
+  "name": "Walking Tours Schedule",
+  "short_name": "WalkingTours",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f6f1d4",
+  "theme_color": "#f6f1d4",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

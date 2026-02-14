@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f1d4" />
+    <title>Availability - Walking Tours</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="availability-page">
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>Availability</h1>
+        </div>
+        <div class="nav">
+          <button id="prevMonth" class="ghost" type="button" aria-label="Previous month">Prev</button>
+          <div class="month" id="monthLabel">Month</div>
+          <button id="nextMonth" class="ghost" type="button" aria-label="Next month">Next</button>
+        </div>
+        <div class="avatar-menu" id="avatarMenu">
+          <button id="avatarButton" class="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+            <span class="menu-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+          <div class="menu" id="avatarDropdown">
+            <a class="menu-item" href="index.html">Walking tours</a>
+            <a class="menu-item" href="share.html">Share</a>
+            <a class="menu-item" href="availability.html">Availability</a>
+            <a class="menu-item" href="profile.html">Profile</a>
+            <a class="menu-item" href="tour-config.html">Tour configuration</a>
+            <button class="menu-item" id="signOutBtn" type="button">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="calendar" aria-label="Monthly calendar">
+        <div class="weekdays" id="weekdayRow"></div>
+        <div class="grid" id="calendarGrid"></div>
+      </section>
+
+      <section class="details day-panel" aria-live="polite">
+        <div class="details-title">Tip</div>
+        <div class="details-content">Click a day to mark yourself unavailable (gray). Click again to make it available.</div>
+      </section>
+    </div>
+
+    <script type="module" src="availability.js"></script>
+  </body>
+</html>

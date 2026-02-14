@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f1d4" />
+    <title>Profile - Walking Tours</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>Profile</h1>
+        </div>
+        <div class="avatar-menu" id="avatarMenu">
+          <button id="avatarButton" class="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+            <span class="menu-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+          <div class="menu" id="avatarDropdown">
+            <a class="menu-item" href="index.html">Walking tours</a>
+            <a class="menu-item" href="share.html">Share</a>
+            <a class="menu-item" href="availability.html">Availability</a>
+            <a class="menu-item" href="profile.html">Profile</a>
+            <button class="menu-item" id="signOutBtn" type="button">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Guide</div>
+        <div id="profileInfo" class="details-content"></div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Bank Details</div>
+        <div class="details-content">
+          <div class="form-row">
+            <input id="sortCode" class="input" type="text" placeholder="Sort code" />
+            <input id="accountNumber" class="input" type="text" placeholder="Account" />
+            <input id="accountName" class="input" type="text" placeholder="Account name" />
+            <button id="saveProfile" class="primary" type="button">Save</button>
+          </div>
+          <div id="profileStatus" class="muted"></div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="profile.js"></script>
+  </body>
+</html>
