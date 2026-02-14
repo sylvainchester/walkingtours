@@ -296,6 +296,7 @@ h1 {
   border-radius: 16px;
   padding: 12px;
   flex: 0 0 auto;
+  --cell: min(11vw, 9vh, 56px);
 }
 
 .weekdays {
@@ -314,9 +315,8 @@ h1 {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 8px;
-  --cell: min(12vw, 64px);
   grid-auto-rows: var(--cell);
-  min-height: calc(var(--cell) * 6 + 8px * 5);
+  height: calc(var(--cell) * 6 + 8px * 5);
 }
 
 .day {
