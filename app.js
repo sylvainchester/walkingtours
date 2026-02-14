@@ -735,12 +735,20 @@ function bindAuth() {
 async function initAuth() {
   const { data } = await supabase.auth.getSession();
   session = data.session;
+  if (!session) {
+    window.location.href = "sign-in.html";
+    return;
+  }
   toggleAuthUI(Boolean(session));
   await loadMonthTours();
 
   supabase.auth.onAuthStateChange((_event, newSession) => {
     session = newSession;
     toggleAuthUI(Boolean(session));
+    if (!session) {
+      window.location.href = "sign-in.html";
+      return;
+    }
     loadMonthTours();
   });
 }
