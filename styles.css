@@ -219,6 +219,15 @@ h1 {
   padding: 12px;
 }
 
+.auth-page.centered {
+  justify-content: center;
+}
+
+.auth-page.centered .topbar {
+  justify-content: center;
+  text-align: center;
+}
+
 .auth-fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
