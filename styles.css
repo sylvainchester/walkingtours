@@ -34,7 +34,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  height: 100%;
+  height: 100vh;
   min-height: 0;
 }
 
@@ -295,9 +295,7 @@ h1 {
   border: 1px solid var(--cell-border);
   border-radius: 16px;
   padding: 12px;
-  overflow: auto;
-  min-height: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
 }
 
 .weekdays {
@@ -402,9 +400,8 @@ h1 {
 }
 
 .day-panel {
-  flex: 0 0 min(35vh, 360px);
-  max-height: 35vh;
-  min-height: 200px;
+  flex: 1 1 auto;
+  min-height: 160px;
   overflow: hidden;
 }
 
