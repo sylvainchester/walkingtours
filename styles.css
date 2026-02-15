@@ -286,6 +286,11 @@ h1 {
   background: #fff;
 }
 
+.auth-fields select {
+  width: 100%;
+  max-width: 100%;
+}
+
 .auth-actions {
   display: flex;
   flex-wrap: wrap;
