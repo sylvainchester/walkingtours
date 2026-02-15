@@ -87,6 +87,11 @@ function renderCalendar() {
   for (let day = 1; day <= totalDays; day += 1) cells.push(day);
   while (cells.length % 7 !== 0) cells.push(null);
 
+  const todayISO = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  })();
+
   cells.forEach((day, idx) => {
     const cell = document.createElement("button");
     cell.type = "button";
@@ -101,15 +106,19 @@ function renderCalendar() {
     }
 
     const iso = toISO(viewYear, viewMonth, day);
+    const isPastDate = iso < todayISO;
     cell.textContent = String(day);
     cell.setAttribute("aria-label", `${iso}`);
 
-    if (availableDates.has(iso)) {
+    if (isPastDate) {
+      cell.classList.add("past");
+    } else if (availableDates.has(iso)) {
       cell.classList.add("available");
     }
 
     cell.addEventListener("click", async () => {
       if (!session) return;
+      if (isPastDate) return;
       if (availableDates.has(iso)) {
         const { error } = await supabase
           .from("guide_availability")

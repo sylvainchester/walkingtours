@@ -289,15 +289,7 @@ function renderCalendar() {
     cell.textContent = String(day);
     cell.setAttribute("aria-label", `${iso}`);
     if (isPastDate) {
-      if (tours.some((t) => t.status === "accepted")) {
-        cell.classList.add("booked", "past");
-      } else {
-        cell.classList.add("past");
-      }
-    } else if (tours.some((t) => t.status === "pending")) {
-      cell.classList.add("pending");
-    } else if (tours.some((t) => t.status === "accepted")) {
-      cell.classList.add("booked");
+      cell.classList.add("past");
     } else if (availabilityDates.has(iso)) {
       cell.classList.add("available");
     } else {
@@ -306,10 +298,11 @@ function renderCalendar() {
     if (selectedDate === iso) cell.classList.add("selected");
 
     if (tours.length) {
-      const badge = document.createElement("div");
-      badge.className = "badge";
-      badge.textContent = `${tours.length}x`;
-      cell.appendChild(badge);
+      const indicator = document.createElement("div");
+      const hasPending = tours.some((t) => t.status === "pending");
+      indicator.className = `tour-indicator ${hasPending ? "pending" : "accepted"}`;
+      indicator.textContent = String(tours.length);
+      cell.appendChild(indicator);
     }
 
     cell.addEventListener("click", () => {
@@ -610,11 +603,11 @@ async function showDetails(iso) {
 
   const startInput = document.createElement("input");
   startInput.type = "time";
-  startInput.className = "input";
+  startInput.className = "input time-input";
 
   const endInput = document.createElement("input");
   endInput.type = "time";
-  endInput.className = "input";
+  endInput.className = "input time-input";
 
   startInput.addEventListener("change", () => {
     endInput.value = addMinutesToTime(startInput.value, 90);
