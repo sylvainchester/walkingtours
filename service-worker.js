@@ -1,4 +1,4 @@
-const CACHE_NAME = "walkingtours-v12";
+const CACHE_NAME = "walkingtours-v13";
 const ASSETS = [
   "./",
   "./index.html",
@@ -16,6 +16,7 @@ const ASSETS = [
   "./availability.js",
   "./profile.js",
   "./tour-config.js",
+  "./sw-register.js",
   "./config.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
@@ -43,4 +44,8 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });
