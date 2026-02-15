@@ -479,9 +479,10 @@ h1 {
 
 .day-panel {
   flex: 1 1 auto;
-  min-height: 160px;
+  min-height: 0;
   overflow: hidden;
-  margin-top: auto;
+  margin-top: 0;
+  max-height: calc(100vh - 360px);
 }
 
 .day-panel .details-content {
