@@ -1,4 +1,4 @@
-import { VAPID_PUBLIC_KEY } from "./config.js";
+import { VAPID_PUBLIC_KEY, PUSH_API_URL } from "./config.js";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -49,7 +49,11 @@ export async function sendPush(supabase, payload) {
   const accessToken = data?.session?.access_token;
   if (!accessToken) return;
 
-  const response = await fetch("/api/send-push", {
+  const isLocalHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+  const endpoint = PUSH_API_URL
+    || (isLocalHost ? "https://walkingtours.vercel.app/api/send-push" : "/api/send-push");
+
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -20,6 +20,20 @@ let viewMonth = today.getMonth();
 let session = null;
 let availableDates = new Set();
 
+async function refreshShareInviteIndicators() {
+  if (!session) return;
+  const { count, error } = await supabase
+    .from("guide_share_invites")
+    .select("id", { head: true, count: "exact" })
+    .eq("to_guide_id", session.user.id)
+    .eq("status", "pending");
+  if (error) return;
+  const hasPending = Number(count || 0) > 0;
+  avatarButton?.classList.toggle("has-pending-dot", hasPending);
+  avatarDropdown?.querySelector('a[href="share.html"]')
+    ?.classList.toggle("has-pending-dot", hasPending);
+}
+
 function pad2(value) {
   return String(value).padStart(2, "0");
 }
@@ -157,6 +171,7 @@ async function init() {
     return;
   }
   await ensurePushSubscription(supabase, session);
+  await refreshShareInviteIndicators();
   await loadAvailability();
   renderCalendar();
 }

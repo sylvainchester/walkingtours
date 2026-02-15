@@ -14,6 +14,28 @@ const signOutBtn = document.getElementById("signOutBtn");
 const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
 
+async function refreshShareInviteIndicators() {
+  if (!session) return;
+  const { count, error } = await supabase
+    .from("guide_share_invites")
+    .select("id", { head: true, count: "exact" })
+    .eq("to_guide_id", session.user.id)
+    .eq("status", "pending");
+  if (error) return;
+  const hasPending = Number(count || 0) > 0;
+  avatarButton?.classList.toggle("has-pending-dot", hasPending);
+  avatarDropdown?.querySelector('a[href="share.html"]')
+    ?.classList.toggle("has-pending-dot", hasPending);
+}
+
+function getSessionGuideName() {
+  const first = (session?.user?.user_metadata?.first_name || "").trim();
+  const last = (session?.user?.user_metadata?.last_name || "").trim();
+  const full = `${first} ${last}`.trim();
+  if (full) return full;
+  return (session?.user?.email || "A guide").trim();
+}
+
 function setStatus(message) {
   if (shareStatus) shareStatus.textContent = message || "";
 }
@@ -29,6 +51,7 @@ async function init() {
   await loadGuideOptions();
   await loadShares();
   await loadPendingInvites();
+  await refreshShareInviteIndicators();
 }
 
 function clearChildren(node) {
@@ -234,16 +257,18 @@ async function loadPendingInvites() {
         }
 
         if (invite.from_guide_id !== session.user.id) {
+          const accepterName = getSessionGuideName();
           await sendPush(supabase, {
             to_user_id: invite.from_guide_id,
             title: "Share accepted",
-            body: "Your calendar share was accepted.",
+            body: `${accepterName} accepted your calendar share request.`,
             data: { url: "./share.html" },
           });
         }
 
         await loadShares();
         await loadPendingInvites();
+        await refreshShareInviteIndicators();
       });
 
       const declineBtn = document.createElement("button");
@@ -268,6 +293,7 @@ async function loadPendingInvites() {
           });
         }
         await loadPendingInvites();
+        await refreshShareInviteIndicators();
       });
 
       actions.appendChild(acceptBtn);
@@ -358,14 +384,16 @@ async function handleShare() {
   }
 
   setStatus("Invite sent. Waiting for acceptance.");
+  const requesterName = getSessionGuideName();
   await sendPush(supabase, {
     to_user_id: targetId,
     title: "Share invite",
-    body: "You have a new calendar share invite.",
+    body: `${requesterName} sent you a calendar share request.`,
     data: { url: "./share.html" },
   });
   shareSelect.value = "";
   await loadPendingInvites();
+  await refreshShareInviteIndicators();
 }
 
 shareBtn.addEventListener("click", handleShare);

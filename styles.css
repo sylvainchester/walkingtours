@@ -209,6 +209,19 @@ h1 {
   place-items: center;
   cursor: pointer;
   font-size: 18px;
+  position: relative;
+}
+
+.avatar.has-pending-dot::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d62a2a;
+  border: 2px solid #fff;
 }
 
 .menu-icon {
@@ -253,6 +266,19 @@ h1 {
   cursor: pointer;
   text-decoration: none;
   color: var(--ink);
+  position: relative;
+}
+
+.menu-item.has-pending-dot::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d62a2a;
+  transform: translateY(-50%);
 }
 
 .menu-item:hover {

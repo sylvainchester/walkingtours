@@ -16,6 +16,20 @@ const avatarDropdown = document.getElementById("avatarDropdown");
 
 let session = null;
 
+async function refreshShareInviteIndicators() {
+  if (!session) return;
+  const { count, error } = await supabase
+    .from("guide_share_invites")
+    .select("id", { head: true, count: "exact" })
+    .eq("to_guide_id", session.user.id)
+    .eq("status", "pending");
+  if (error) return;
+  const hasPending = Number(count || 0) > 0;
+  avatarButton?.classList.toggle("has-pending-dot", hasPending);
+  avatarDropdown?.querySelector('a[href="share.html"]')
+    ?.classList.toggle("has-pending-dot", hasPending);
+}
+
 function setStatus(message) {
   if (profileStatus) profileStatus.textContent = message || "";
 }
@@ -32,6 +46,7 @@ async function loadProfile() {
     return;
   }
   await ensurePushSubscription(supabase, session);
+  await refreshShareInviteIndicators();
 
   const { data: profile, error } = await supabase
     .from("guide_profiles")
