@@ -1,0 +1,26 @@
+HTTP/1.1 500 Internal Server Error
+Date: Sun, 15 Feb 2026 14:24:05 GMT
+Content-Type: text/plain;charset=UTF-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+Server: cloudflare
+CF-Ray: 9ce5777a1a64c765-LHR
+CF-Cache-Status: DYNAMIC
+Access-Control-Allow-Origin: *
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+access-control-allow-headers: authorization, x-client-info, apikey, content-type
+access-control-allow-methods: POST, OPTIONS
+sb-gateway-version: 1
+sb-project-ref: egiwhiujhwelrokdqspt
+sb-request-id: 019c61af-e853-71b6-95e5-4faa78cb69cc
+x-deno-execution-id: 4c3e62fc-4072-4ac9-9ac5-3d356308d1e9
+x-sb-edge-region: eu-west-2
+x-served-by: supabase-edge-runtime
+Set-Cookie: __cf_bm=.C216wCHHCojepMM4yccDT5EcvBOUIhvY3jwoPr3qf8-1771165445-1.0.1.1-.4FEwjEyh6JDqel8AzP5V9FzdaKK2o_4Q.VFRdqP6IVtddrwFmYJHppVHidRNFPU2kHF3e.xJiNQEsce8qwliIrc97u7cy3adxeoGaCTjCE; path=/; expires=Sun, 15-Feb-26 14:54:05 GMT; domain=.supabase.co; HttpOnly; Secure; SameSite=None
+alt-svc: h3=":443"; ma=86400
+
+SyntaxError: Unexpected end of JSON input--_curl_--"to_user_id":"9eb66d69-f076-4ff9-8ab9-23f06003f480"
+--_curl_--"title":"ping"
+--_curl_--"body":"ping"

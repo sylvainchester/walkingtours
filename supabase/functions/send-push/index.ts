@@ -52,7 +52,7 @@ serve(async (req) => {
       return new Response("No subscriptions", { status: 200, headers: corsHeaders });
     }
 
-    const { default: webpush } = await import("https://esm.sh/web-push@3.6.7");
+    const { default: webpush } = await import("https://esm.sh/web-push@3.6.7?target=deno&bundle");
     webpush.setVapidDetails("mailto:admin@example.com", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
     const payload = JSON.stringify({ title, body: message, data });
@@ -67,6 +67,7 @@ serve(async (req) => {
           payload
         );
       } catch (err) {
+        console.error("push send error", err);
         const status = err?.statusCode || err?.status || 0;
         if (status === 404 || status === 410) {
           await supabase.from("push_subscriptions").delete().eq("id", sub.id);
@@ -76,6 +77,8 @@ serve(async (req) => {
 
     return new Response("ok", { headers: corsHeaders });
   } catch (err) {
-    return new Response("Error", { status: 500, headers: corsHeaders });
+    console.error("send-push fatal", err);
+    const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    return new Response(message, { status: 500, headers: corsHeaders });
   }
 });
