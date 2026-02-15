@@ -749,11 +749,11 @@ function bindAuth() {
   }
 
   if (toursToggle) {
-    toursToggle.textContent = onlyMyTours ? "Only my tours" : "Show all tours";
+    toursToggle.textContent = onlyMyTours ? "My tours" : "All tours";
     toursToggle.classList.toggle("only", onlyMyTours);
     toursToggle.addEventListener("click", () => {
       onlyMyTours = !onlyMyTours;
-      toursToggle.textContent = onlyMyTours ? "Only my tours" : "Show all tours";
+      toursToggle.textContent = onlyMyTours ? "My tours" : "All tours";
       toursToggle.classList.toggle("only", onlyMyTours);
       renderCalendar();
     });
