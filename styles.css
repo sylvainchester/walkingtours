@@ -79,6 +79,7 @@ h1 {
   border: none;
   padding: 0;
   flex-wrap: nowrap;
+  max-width: 100%;
 }
 
 .nav-right {
@@ -233,10 +234,12 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
+  max-width: 100%;
 }
 
 .label select {
   font-size: 14px;
+  max-width: 100%;
 }
 
 .field {
@@ -649,4 +652,21 @@ h1 {
   .day { font-size: 16px; }
   .badge { font-size: 10px; }
   .topbar { padding-right: 48px; }
+}
+
+@media (max-width: 520px) {
+  .nav {
+    flex-wrap: wrap;
+  }
+  .nav-right {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .label {
+    width: 100%;
+  }
+  .label span {
+    white-space: normal;
+  }
 }
