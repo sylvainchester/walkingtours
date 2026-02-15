@@ -38,6 +38,7 @@ let selectedGuideId = null;
 let onlyMyTours = true;
 let modalOpenTourId = null;
 let tourTypes = [];
+let ocrBusy = false;
 
 function pad2(value) {
   return String(value).padStart(2, "0");
@@ -509,6 +510,66 @@ function renderTourModal(tour) {
   }
 
   if (canEditParticipants) {
+    const importRow = document.createElement("div");
+    importRow.className = "form-row";
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.style.display = "none";
+
+    const importBtn = document.createElement("button");
+    importBtn.type = "button";
+    importBtn.className = "ghost";
+    importBtn.textContent = ocrBusy ? "Importing..." : "Import participants";
+    importBtn.disabled = ocrBusy;
+    importBtn.addEventListener("click", () => fileInput.click());
+
+    const importStatus = document.createElement("div");
+    importStatus.className = "muted";
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      ocrBusy = true;
+      importBtn.textContent = "Importing...";
+      importBtn.disabled = true;
+      importStatus.textContent = "Reading image...";
+
+      try {
+        const participants = await extractParticipantsFromImage(file);
+        if (!participants.length) {
+          importStatus.textContent = "No participants found.";
+        } else {
+          importStatus.textContent = `Found ${participants.length} participants.`;
+          if (confirm(`Import ${participants.length} participants?`)) {
+            const { error } = await supabase.from("participants").insert(
+              participants.map((p) => ({
+                tour_id: tour.id,
+                name: p.name,
+                group_size: p.group_size,
+              }))
+            );
+            if (!error) {
+              await loadMonthTours();
+            }
+          }
+        }
+      } catch (err) {
+        importStatus.textContent = "Import failed.";
+      } finally {
+        ocrBusy = false;
+        importBtn.textContent = "Import participants";
+        importBtn.disabled = false;
+        fileInput.value = "";
+      }
+    });
+
+    importRow.appendChild(importBtn);
+    importRow.appendChild(importStatus);
+    list.appendChild(importRow);
+    list.appendChild(fileInput);
+
     const form = document.createElement("div");
     form.className = "form-row";
 
@@ -550,6 +611,52 @@ function renderTourModal(tour) {
   }
 
   modalBody.appendChild(list);
+}
+
+async function loadTesseract() {
+  if (window.Tesseract) return;
+  await new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+function parseParticipantsFromText(text) {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const ignore = /reservas|buscar|gu[ií]a|selecciona|enviar|mensaje|difusi[oó]n/i;
+  const participants = [];
+  let lastName = null;
+
+  for (const line of lines) {
+    if (ignore.test(line)) continue;
+    const hasNumber = /\d/.test(line);
+    if (!hasNumber) {
+      lastName = line;
+      continue;
+    }
+    if (lastName) {
+      const nums = line.match(/\d+/g) || [];
+      const groupSize = nums.reduce((sum, n) => sum + Number(n), 0);
+      if (groupSize > 0) {
+        participants.push({ name: lastName, group_size: groupSize });
+      }
+      lastName = null;
+    }
+  }
+  return participants;
+}
+
+async function extractParticipantsFromImage(file) {
+  await loadTesseract();
+  const { data } = await window.Tesseract.recognize(file, "spa+por+eng");
+  return parseParticipantsFromText(data.text || "");
 }
 
 function renderTourItem(tour) {
