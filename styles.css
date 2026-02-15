@@ -54,7 +54,8 @@ body {
   gap: 12px;
   flex-wrap: wrap;
   position: relative;
-  padding-right: 56px;
+  --avatar-space: 56px;
+  padding-right: var(--avatar-space);
 }
 
 .eyebrow {
@@ -83,6 +84,15 @@ h1 {
 }
 
 .nav-right {
+  margin-left: auto;
+  margin-right: calc(-1 * var(--avatar-space));
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.nav-right .label {
+  justify-content: flex-end;
+  text-align: right;
   margin-left: auto;
 }
 
