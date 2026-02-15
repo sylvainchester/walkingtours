@@ -245,19 +245,45 @@ async function generateInvoicePdf(tour) {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
   await loadHtml2Pdf();
-  const pdfArrayBuffer = await window.html2pdf()
-    .set({
-      margin: 0,
-      filename: `${invoiceNo}.pdf`,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    })
-    .from(mount)
-    .toPdf()
-    .output("arraybuffer");
+  if (!window.html2canvas || !window.jspdf?.jsPDF) {
+    document.body.removeChild(mount);
+    throw new Error("PDF renderer not available.");
+  }
 
-  const blob = new Blob([pdfArrayBuffer], { type: "application/pdf" });
+  const canvas = await window.html2canvas(mount, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    logging: false,
+  });
+
+  const imgData = canvas.toDataURL("image/jpeg", 0.98);
+  const pdf = new window.jspdf.jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const imgRatio = canvas.height / canvas.width;
+  const targetWidth = pageWidth;
+  const targetHeight = targetWidth * imgRatio;
+
+  if (targetHeight <= pageHeight) {
+    pdf.addImage(imgData, "JPEG", 0, 0, targetWidth, targetHeight);
+  } else {
+    let remaining = targetHeight;
+    let y = 0;
+    while (remaining > 0) {
+      pdf.addImage(imgData, "JPEG", 0, y, targetWidth, targetHeight);
+      remaining -= pageHeight;
+      y -= pageHeight;
+      if (remaining > 0) pdf.addPage();
+    }
+  }
+
+  const blob = pdf.output("blob");
 
   document.body.removeChild(mount);
   return { blob, invoiceNo };
