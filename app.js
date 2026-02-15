@@ -396,19 +396,37 @@ function renderTourModal(tour) {
     deleteBtn.textContent = "Delete tour";
     deleteBtn.addEventListener("click", async () => {
       if (!confirm("Delete this tour?")) return;
-      const { error } = await supabase.from("tours").delete().eq("id", tour.id);
-      if (!error) {
-        if (isCreator && tour.guide_id !== session.user.id) {
-          await sendPush(supabase, {
-            to_user_id: tour.guide_id,
-            title: "Tour removed",
-            body: `A planned tour on ${tour.date} was deleted.`,
-            data: { url: "./index.html" },
-          });
-        }
-        closeTourModal();
-        await loadMonthTours();
+      const { data: deletedRows, error } = await supabase
+        .from("tours")
+        .delete()
+        .eq("id", tour.id)
+        .select("id,guide_id,created_by,date");
+      if (error) {
+        alert(`Delete error: ${error.message}`);
+        return;
       }
+      if (!deletedRows || deletedRows.length === 0) {
+        alert("Delete failed: not allowed.");
+        return;
+      }
+
+      const deleted = deletedRows[0];
+      const notifyTarget =
+        deleted.created_by === session.user.id && deleted.guide_id !== session.user.id
+          ? deleted.guide_id
+          : deleted.guide_id === session.user.id && deleted.created_by && deleted.created_by !== session.user.id
+            ? deleted.created_by
+            : null;
+      if (notifyTarget) {
+        await sendPush(supabase, {
+          to_user_id: notifyTarget,
+          title: "Tour removed",
+          body: `A planned tour on ${deleted.date} was deleted.`,
+          data: { url: "./index.html" },
+        });
+      }
+      closeTourModal();
+      await loadMonthTours();
     });
     deleteRow.appendChild(deleteBtn);
     modalBody.appendChild(deleteRow);
