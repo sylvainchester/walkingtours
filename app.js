@@ -119,9 +119,8 @@ function money(value) {
 
 function computeInvoicePersons(participants) {
   if (!participants || participants.length === 0) return 0;
-  const nonAbsent = participants.filter((p) => p.attendance_status !== "absent");
-  const source = nonAbsent.length > 0 ? nonAbsent : participants;
-  return source.reduce((sum, p) => sum + Number(p.group_size || 0), 0);
+  const arrived = participants.filter((p) => p.attendance_status === "arrived");
+  return arrived.reduce((sum, p) => sum + Number(p.group_size || 0), 0);
 }
 
 function replaceInvoiceTokens(template, values) {
@@ -181,7 +180,6 @@ async function generateInvoicePdf(tour) {
     throw new Error("Could not load invoice template.");
   }
   const template = await templateResponse.text();
-  const templateWithoutImage = template.replace(/<img[\s\S]*?>/gi, "");
 
   const personsTotal = computeInvoicePersons(tour.participants);
   const unitPrice = Number(
@@ -203,7 +201,7 @@ async function generateInvoicePdf(tour) {
     day: "numeric",
   });
 
-  const html = replaceInvoiceTokens(templateWithoutImage, {
+  const html = replaceInvoiceTokens(template, {
     invoiceNo,
     guideFirstName: guideProfile?.first_name || "",
     guideLastName: guideProfile?.last_name || "",
@@ -223,12 +221,24 @@ async function generateInvoicePdf(tour) {
     bankEmail: guideProfile?.email || "",
   });
 
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const styleText = Array.from(parsed.querySelectorAll("style"))
+    .map((node) => node.textContent || "")
+    .join("\n");
+  const bodyHtml = parsed.body ? parsed.body.innerHTML : html;
+
   const mount = document.createElement("div");
   mount.style.position = "fixed";
-  mount.style.left = "-10000px";
+  mount.style.left = "0";
   mount.style.top = "0";
   mount.style.width = "794px";
-  mount.innerHTML = html;
+  mount.style.background = "#fff";
+  mount.style.zIndex = "9999";
+  mount.style.pointerEvents = "none";
+  mount.innerHTML = `<style>${styleText}</style>${bodyHtml}`;
+
+  // Template image link can expire; remove it to avoid render failures.
+  mount.querySelectorAll("img").forEach((img) => img.remove());
   document.body.appendChild(mount);
 
   await loadHtml2Pdf();
@@ -241,7 +251,8 @@ async function generateInvoicePdf(tour) {
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
     })
     .from(mount)
-    .outputPdf("blob");
+    .toPdf()
+    .output("blob");
 
   document.body.removeChild(mount);
   return { blob, invoiceNo };
@@ -524,6 +535,12 @@ function renderTourModal(tour) {
   const isLocked = Boolean(tour.participants_locked);
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast && !isLocked && !isPrivate;
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
+  const canLockParticipants = Boolean(session)
+    && tour.status === "accepted"
+    && !isPast
+    && !isLocked
+    && !isPrivate
+    && (isOwner || isCreator);
 
   if (canDeleteTour) {
     const deleteRow = document.createElement("div");
@@ -793,7 +810,7 @@ function renderTourModal(tour) {
 
   modalBody.appendChild(list);
 
-  if (isOwner && !isLocked) {
+  if (canLockParticipants) {
     const lockRow = document.createElement("div");
     lockRow.className = "form-row";
     const lockBtn = document.createElement("button");
@@ -802,6 +819,13 @@ function renderTourModal(tour) {
     lockBtn.textContent = "Lock participants";
     lockBtn.addEventListener("click", async () => {
       if (!confirm("Lock participants permanently? This cannot be undone.")) return;
+      const unresolved = (tour.participants || []).filter(
+        (p) => p.attendance_status !== "arrived" && p.attendance_status !== "absent"
+      );
+      if (unresolved.length > 0) {
+        alert("Set each participant as arrived or no-show before locking.");
+        return;
+      }
       let filePath = null;
       try {
         const { blob, invoiceNo } = await generateInvoicePdf(tour);
@@ -835,6 +859,11 @@ function renderTourModal(tour) {
     lockedNote.className = "muted";
     lockedNote.textContent = "Participants are locked.";
     modalBody.appendChild(lockedNote);
+  } else if (tour.status !== "accepted") {
+    const pendingNote = document.createElement("div");
+    pendingNote.className = "muted";
+    pendingNote.textContent = "Lock is available only after tour acceptance.";
+    modalBody.appendChild(pendingNote);
   }
 }
 
