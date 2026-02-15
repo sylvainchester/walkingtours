@@ -40,6 +40,7 @@ let selectedGuideId = null;
 let onlyMyTours = true;
 let modalOpenTourId = null;
 let tourTypes = [];
+let html2pdfLoader = null;
 let ocrBusy = false;
 
 function pad2(value) {
@@ -107,6 +108,143 @@ function addMinutesToTime(value, minutesToAdd) {
   const newH = Math.floor(total / 60) % 24;
   const newM = total % 60;
   return `${pad2(newH)}:${pad2(newM)}`;
+}
+
+function money(value) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+  }).format(Number(value || 0));
+}
+
+function computeInvoicePersons(participants) {
+  if (!participants || participants.length === 0) return 0;
+  const nonAbsent = participants.filter((p) => p.attendance_status !== "absent");
+  const source = nonAbsent.length > 0 ? nonAbsent : participants;
+  return source.reduce((sum, p) => sum + Number(p.group_size || 0), 0);
+}
+
+function replaceInvoiceTokens(template, values) {
+  return template.replace(/{{\s*([A-Za-z0-9_]+)\s*}}/g, (_match, key) => {
+    return String(values[key] ?? "");
+  });
+}
+
+async function loadHtml2Pdf() {
+  if (window.html2pdf) return;
+  if (html2pdfLoader) {
+    await html2pdfLoader;
+    return;
+  }
+  html2pdfLoader = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  await html2pdfLoader;
+}
+
+async function loadGuideProfileById(guideId) {
+  const cached = sharedGuideProfiles.get(guideId);
+  if (cached?.sort_code !== undefined || cached?.account_number !== undefined || cached?.account_name !== undefined) {
+    return cached;
+  }
+  const { data } = await supabase
+    .from("guide_profiles")
+    .select("id,first_name,last_name,email,sort_code,account_number,account_name")
+    .eq("id", guideId)
+    .maybeSingle();
+  if (data) sharedGuideProfiles.set(guideId, data);
+  return data || null;
+}
+
+async function loadTourTypeForTour(tour) {
+  const { data } = await supabase
+    .from("tour_types")
+    .select("name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name")
+    .eq("guide_id", tour.guide_id)
+    .eq("name", tour.type)
+    .maybeSingle();
+  return data || null;
+}
+
+async function generateInvoicePdf(tour) {
+  const [guideProfile, tourType] = await Promise.all([
+    loadGuideProfileById(tour.guide_id),
+    loadTourTypeForTour(tour),
+  ]);
+
+  const templateResponse = await fetch("./invoice.html", { cache: "no-store" });
+  if (!templateResponse.ok) {
+    throw new Error("Could not load invoice template.");
+  }
+  const template = await templateResponse.text();
+  const templateWithoutImage = template.replace(/<img[\s\S]*?>/gi, "");
+
+  const personsTotal = computeInvoicePersons(tour.participants);
+  const unitPrice = Number(
+    tourType?.payment_type === "free"
+      ? (tourType?.fee_per_participant ?? 0)
+      : (tourType?.ticket_price ?? 0)
+  );
+  const commissionPct = Number(tourType?.commission_percent ?? 0);
+  const gross = unitPrice * personsTotal;
+  const commission = (gross * commissionPct) / 100;
+  const total = gross - commission;
+
+  const invoiceNo = `INV-${tour.date.replaceAll("-", "")}-${tour.id.slice(0, 8).toUpperCase()}`;
+  const bookingRef = tour.id.slice(0, 8).toUpperCase();
+  const prettyDate = new Date(`${tour.date}T00:00:00`).toLocaleDateString("en-GB", {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  const html = replaceInvoiceTokens(templateWithoutImage, {
+    invoiceNo,
+    guideFirstName: guideProfile?.first_name || "",
+    guideLastName: guideProfile?.last_name || "",
+    clientName: tourType?.invoice_org_name || "Invoice client",
+    prettyDate,
+    bookingRef,
+    tourLabel: tour.type || "Tour",
+    personsTotal,
+    pricePerPerson: money(unitPrice),
+    gross: money(gross),
+    CommisionPct: commissionPct.toFixed(2),
+    vicCommission: money(commission),
+    total: money(total),
+    bankPayeeName: guideProfile?.account_name || "",
+    bankSortCode: guideProfile?.sort_code || "",
+    bankAccountNumber: guideProfile?.account_number || "",
+    bankEmail: guideProfile?.email || "",
+  });
+
+  const mount = document.createElement("div");
+  mount.style.position = "fixed";
+  mount.style.left = "-10000px";
+  mount.style.top = "0";
+  mount.style.width = "794px";
+  mount.innerHTML = html;
+  document.body.appendChild(mount);
+
+  await loadHtml2Pdf();
+  const blob = await window.html2pdf()
+    .set({
+      margin: 0,
+      filename: `${invoiceNo}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    })
+    .from(mount)
+    .outputPdf("blob");
+
+  document.body.removeChild(mount);
+  return { blob, invoiceNo };
 }
 
 function toggleAuthUI(isAuthed) {
@@ -664,9 +802,27 @@ function renderTourModal(tour) {
     lockBtn.textContent = "Lock participants";
     lockBtn.addEventListener("click", async () => {
       if (!confirm("Lock participants permanently? This cannot be undone.")) return;
+      let filePath = null;
+      try {
+        const { blob, invoiceNo } = await generateInvoicePdf(tour);
+        filePath = `${tour.guide_id}/${tour.date}/${tour.id}/${invoiceNo}.pdf`;
+        const { error: uploadError } = await supabase.storage
+          .from("invoices")
+          .upload(filePath, blob, {
+            contentType: "application/pdf",
+            upsert: true,
+          });
+        if (uploadError) {
+          alert(`Invoice upload error: ${uploadError.message}`);
+          return;
+        }
+      } catch (invoiceError) {
+        alert(`Invoice generation error: ${invoiceError.message || invoiceError}`);
+        return;
+      }
       const { error } = await supabase
         .from("tours")
-        .update({ participants_locked: true })
+        .update({ participants_locked: true, invoice_path: filePath })
         .eq("id", tour.id);
       if (!error) {
         await loadMonthTours();
