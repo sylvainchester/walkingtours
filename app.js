@@ -532,14 +532,19 @@ function renderTourModal(tour) {
 
   const isOwner = session && tour.guide_id === session.user.id;
   const isCreator = session && tour.created_by === session.user.id;
+  const canManageLock = Boolean(session) && (isOwner || isCreator);
   const isLocked = Boolean(tour.participants_locked);
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast && !isLocked && !isPrivate;
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
+  const unresolvedParticipants = (tour.participants || []).filter(
+    (p) => p.attendance_status !== "arrived" && p.attendance_status !== "absent"
+  );
   const canLockParticipants = Boolean(session)
     && tour.status === "accepted"
     && !isPast
     && !isLocked
     && !isPrivate
+    && unresolvedParticipants.length === 0
     && (isOwner || isCreator);
 
   if (canDeleteTour) {
@@ -810,22 +815,17 @@ function renderTourModal(tour) {
 
   modalBody.appendChild(list);
 
-  if (canLockParticipants) {
+  if (canManageLock && !isLocked) {
     const lockRow = document.createElement("div");
     lockRow.className = "form-row";
     const lockBtn = document.createElement("button");
     lockBtn.type = "button";
     lockBtn.className = "ghost danger";
     lockBtn.textContent = "Lock participants";
+    lockBtn.disabled = !canLockParticipants;
     lockBtn.addEventListener("click", async () => {
+      if (!canLockParticipants) return;
       if (!confirm("Lock participants permanently? This cannot be undone.")) return;
-      const unresolved = (tour.participants || []).filter(
-        (p) => p.attendance_status !== "arrived" && p.attendance_status !== "absent"
-      );
-      if (unresolved.length > 0) {
-        alert("Set each participant as arrived or no-show before locking.");
-        return;
-      }
       let filePath = null;
       try {
         const { blob, invoiceNo } = await generateInvoicePdf(tour);
@@ -853,6 +853,20 @@ function renderTourModal(tour) {
       }
     });
     lockRow.appendChild(lockBtn);
+    if (!canLockParticipants) {
+      const reason = document.createElement("div");
+      reason.className = "muted";
+      if (tour.status !== "accepted") {
+        reason.textContent = "Lock is available only after tour acceptance.";
+      } else if (isPast) {
+        reason.textContent = "Past tours cannot be locked.";
+      } else if (isPrivate) {
+        reason.textContent = "Private tours cannot be locked.";
+      } else if (unresolvedParticipants.length > 0) {
+        reason.textContent = "Set each participant as arrived or no-show before locking.";
+      }
+      lockRow.appendChild(reason);
+    }
     modalBody.appendChild(lockRow);
   } else if (isLocked) {
     const lockedNote = document.createElement("div");
