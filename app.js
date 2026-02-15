@@ -984,11 +984,9 @@ function renderTourModal(tour) {
           `Please find the invoice related to the tour "${tour.type}" completed on ${whenText} by guide "${guideName}".\n\n` +
           `Invoice PDF link:\n${data.signedUrl}\n\n` +
           `Best regards`;
-        const ccPart = guideEmail ? `&cc=${encodeURIComponent(guideEmail)}` : "";
         const mailtoUrl =
           `mailto:${encodeURIComponent(toEmail)}` +
           `?subject=${encodeURIComponent(subject)}` +
-          `${ccPart}` +
           `&body=${encodeURIComponent(bodyText)}`;
         window.location.href = mailtoUrl;
       });
