@@ -1,5 +1,6 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
+import { ensurePushSubscription, sendPush } from "./push.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -10,6 +11,7 @@ const shareList = document.getElementById("shareList");
 const pendingList = document.getElementById("pendingList");
 let session = null;
 const signOutBtn = document.getElementById("signOutBtn");
+const enablePushBtn = document.getElementById("enablePushBtn");
 const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
 
@@ -24,6 +26,7 @@ async function init() {
     window.location.href = "sign-in.html";
     return;
   }
+  await ensurePushSubscription(supabase, session);
   await loadGuideOptions();
   await loadShares();
   await loadPendingInvites();
@@ -231,6 +234,15 @@ async function loadPendingInvites() {
           return;
         }
 
+        if (invite.from_guide_id !== session.user.id) {
+          await sendPush(session, {
+            to_user_id: invite.from_guide_id,
+            title: "Share accepted",
+            body: "Your calendar share was accepted.",
+            data: { url: "./share.html" },
+          });
+        }
+
         await loadShares();
         await loadPendingInvites();
       });
@@ -247,6 +259,14 @@ async function loadPendingInvites() {
         if (declineError) {
           setStatus(`Decline error: ${declineError.message}`);
           return;
+        }
+        if (invite.from_guide_id !== session.user.id) {
+          await sendPush(session, {
+            to_user_id: invite.from_guide_id,
+            title: "Share declined",
+            body: "Your calendar share was declined.",
+            data: { url: "./share.html" },
+          });
         }
         await loadPendingInvites();
       });
@@ -339,11 +359,26 @@ async function handleShare() {
   }
 
   setStatus("Invite sent. Waiting for acceptance.");
+  await sendPush(session, {
+    to_user_id: targetId,
+    title: "Share invite",
+    body: "You have a new calendar share invite.",
+    data: { url: "./share.html" },
+  });
   shareSelect.value = "";
   await loadPendingInvites();
 }
 
 shareBtn.addEventListener("click", handleShare);
+
+if (enablePushBtn) {
+  enablePushBtn.addEventListener("click", async () => {
+    if (!session) return;
+    await ensurePushSubscription(supabase, session);
+    avatarDropdown?.classList.remove("open");
+    alert("Notifications enabled (if allowed by your browser).");
+  });
+}
 
 if (signOutBtn) {
   signOutBtn.addEventListener("click", async () => {

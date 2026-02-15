@@ -1,4 +1,4 @@
-const CACHE_NAME = "walkingtours-v17";
+const CACHE_NAME = "walkingtours-v18";
 const ASSETS = [
   "./",
   "./index.html",
@@ -17,6 +17,7 @@ const ASSETS = [
   "./profile.js",
   "./tour-config.js",
   "./sw-register.js",
+  "./push.js",
   "./config.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
@@ -71,4 +72,32 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("message", (event) => {
   if (event.data === "SKIP_WAITING") self.skipWaiting();
+});
+
+self.addEventListener("push", (event) => {
+  const payload = event.data ? event.data.json() : {};
+  const title = payload.title || "Walking Tours";
+  const options = {
+    body: payload.body || "",
+    data: payload.data || {},
+    icon: "./icons/icon.svg",
+    badge: "./icons/icon.svg",
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification?.data?.url || "./index.html";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url && "focus" in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(targetUrl);
+    })
+  );
 });

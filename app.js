@@ -1,5 +1,6 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
+import { ensurePushSubscription, sendPush } from "./push.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -17,6 +18,7 @@ const avatarDropdown = document.getElementById("avatarDropdown");
 const signInLink = document.getElementById("signInLink");
 const signUpLink = document.getElementById("signUpLink");
 const signOutBtn = document.getElementById("signOutBtn");
+const enablePushBtn = document.getElementById("enablePushBtn");
 const shareLink = document.getElementById("shareLink");
 const availabilityLink = document.getElementById("availabilityLink");
 const guideFilter = document.getElementById("guideFilter");
@@ -453,6 +455,14 @@ function renderTourModal(tour) {
         .update({ status: "accepted" })
         .eq("id", tour.id);
       if (!error) {
+        if (tour.created_by && tour.created_by !== session.user.id) {
+          await sendPush(session, {
+            to_user_id: tour.created_by,
+            title: "Tour accepted",
+            body: `${guideName} accepted the tour on ${tour.date}.`,
+            data: { url: "./index.html" },
+          });
+        }
         await loadMonthTours();
       }
     });
@@ -465,6 +475,14 @@ function renderTourModal(tour) {
       if (!confirm("Decline this tour? It will be removed.")) return;
       const { error } = await supabase.from("tours").delete().eq("id", tour.id);
       if (!error) {
+        if (tour.created_by && tour.created_by !== session.user.id) {
+          await sendPush(session, {
+            to_user_id: tour.created_by,
+            title: "Tour declined",
+            body: `${guideName} declined the tour on ${tour.date}.`,
+            data: { url: "./index.html" },
+          });
+        }
         closeTourModal();
         await loadMonthTours();
       }
@@ -881,6 +899,14 @@ async function showDetails(iso) {
       is_private: selectedType.shareable === false,
     });
     if (!error) {
+      if (selectedGuide !== session.user.id) {
+        await sendPush(session, {
+          to_user_id: selectedGuide,
+          title: "New tour pending",
+          body: `A tour is waiting for your approval on ${iso} at ${(startInput.value || "").slice(0, 5)}.`,
+          data: { url: "./index.html" },
+        });
+      }
       await loadMonthTours();
     }
   });
@@ -924,6 +950,14 @@ async function handleAuthSignOut() {
 
 function bindAuth() {
   if (signOutBtn) signOutBtn.addEventListener("click", handleAuthSignOut);
+  if (enablePushBtn) {
+    enablePushBtn.addEventListener("click", async () => {
+      if (!session) return;
+      await ensurePushSubscription(supabase, session);
+      closeMenu();
+      alert("Notifications enabled (if allowed by your browser).");
+    });
+  }
   if (avatarButton) avatarButton.addEventListener("click", toggleMenu);
   if (modalClose) modalClose.addEventListener("click", closeTourModal);
   if (tourModal) {
@@ -967,6 +1001,7 @@ async function initAuth() {
     return;
   }
   toggleAuthUI(Boolean(session));
+  await ensurePushSubscription(supabase, session);
   await loadMonthTours();
 
   supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -976,6 +1011,7 @@ async function initAuth() {
       window.location.href = "sign-in.html";
       return;
     }
+    ensurePushSubscription(supabase, session);
     loadMonthTours();
   });
 }

@@ -1,5 +1,6 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
+import { ensurePushSubscription } from "./push.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -16,6 +17,7 @@ const addType = document.getElementById("addType");
 const typeStatus = document.getElementById("typeStatus");
 const typesList = document.getElementById("typesList");
 const signOutBtn = document.getElementById("signOutBtn");
+const enablePushBtn = document.getElementById("enablePushBtn");
 const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
 const typeModal = document.getElementById("typeModal");
@@ -359,6 +361,7 @@ async function init() {
     window.location.href = "sign-in.html";
     return;
   }
+  await ensurePushSubscription(supabase, session);
   await loadSharedGuides();
   await loadTypes();
 }
@@ -373,6 +376,15 @@ if (signOutBtn) {
   signOutBtn.addEventListener("click", async () => {
     await supabase.auth.signOut();
     window.location.href = "sign-in.html";
+  });
+}
+
+if (enablePushBtn) {
+  enablePushBtn.addEventListener("click", async () => {
+    if (!session) return;
+    await ensurePushSubscription(supabase, session);
+    avatarDropdown?.classList.remove("open");
+    alert("Notifications enabled (if allowed by your browser).");
   });
 }
 
