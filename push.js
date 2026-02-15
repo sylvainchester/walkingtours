@@ -45,8 +45,14 @@ export async function ensurePushSubscription(supabase, session) {
 export async function sendPush(supabase, payload) {
   if (!supabase) return;
   const { data } = await supabase.auth.getSession();
-  if (!data?.session?.access_token) return;
-  const { error } = await supabase.functions.invoke("send-push", { body: payload });
+  const accessToken = data?.session?.access_token;
+  if (!accessToken) return;
+  const { error } = await supabase.functions.invoke("send-push", {
+    body: payload,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
   if (error) {
     console.error("push invoke error", error.message || error);
   }
