@@ -37,14 +37,34 @@
       <section class="details" aria-live="polite">
         <div class="details-title">New Tour Type</div>
         <div class="details-content">
-          <div class="form-row">
-            <input id="typeName" class="input" type="text" placeholder="Tour name" />
-            <input id="ticketPrice" class="input" type="number" step="0.01" placeholder="Ticket price" />
-            <input id="commission" class="input" type="number" step="0.01" placeholder="Commission %" />
-            <input id="invoiceOrgName" class="input" type="text" placeholder="Invoice organization name" />
-            <input id="invoiceOrgAddress" class="input" type="text" placeholder="Invoice organization address" />
-            <input id="typeDescription" class="input" type="text" placeholder="Description" />
-            <button id="addType" class="primary" type="button">Add</button>
+          <div class="form-col">
+            <label class="field">
+              <span>Tour name</span>
+              <input id="typeName" class="input" type="text" placeholder="Tour name" />
+            </label>
+            <label class="field">
+              <span>Ticket price</span>
+              <input id="ticketPrice" class="input" type="number" step="0.01" placeholder="Ticket price" />
+            </label>
+            <label class="field">
+              <span>Commission %</span>
+              <input id="commission" class="input" type="number" step="0.01" placeholder="Commission %" />
+            </label>
+            <label class="field">
+              <span>Invoice org name</span>
+              <input id="invoiceOrgName" class="input" type="text" placeholder="Invoice organization name" />
+            </label>
+            <label class="field">
+              <span>Invoice address</span>
+              <input id="invoiceOrgAddress" class="input" type="text" placeholder="Invoice address" />
+            </label>
+            <label class="field">
+              <span>Description</span>
+              <input id="typeDescription" class="input" type="text" placeholder="Description" />
+            </label>
+            <div class="form-row">
+              <button id="addType" class="primary" type="button">Add</button>
+            </div>
           </div>
           <div id="typeStatus" class="muted"></div>
         </div>

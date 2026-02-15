@@ -52,7 +52,7 @@ function renderTypeModal(type) {
   const isOwner = type.guide_id === session.user.id;
 
   const form = document.createElement("div");
-  form.className = "form-row";
+  form.className = "form-col";
 
   const makeLabeled = (labelText, inputEl) => {
     const wrap = document.createElement("label");
@@ -144,10 +144,14 @@ function renderTypeModal(type) {
   form.appendChild(makeLabeled("Ticket price", priceInput));
   form.appendChild(makeLabeled("Commission %", commissionInput));
   form.appendChild(makeLabeled("Invoice org name", orgNameInput));
-  form.appendChild(makeLabeled("Invoice org address", orgAddressInput));
+  form.appendChild(makeLabeled("Invoice address", orgAddressInput));
   form.appendChild(makeLabeled("Description", descInput));
-  form.appendChild(saveBtn);
-  form.appendChild(deleteBtn);
+
+  const actions = document.createElement("div");
+  actions.className = "form-row";
+  actions.appendChild(saveBtn);
+  actions.appendChild(deleteBtn);
+  form.appendChild(actions);
 
   typeModalBody.appendChild(form);
 }
