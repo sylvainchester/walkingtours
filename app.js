@@ -375,6 +375,43 @@ function renderTourModal(tour) {
 
   const isOwner = session && tour.guide_id === session.user.id;
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast;
+  const canEditTour = Boolean(isOwner) && !isPast;
+
+  if (canEditTour) {
+    const timeRow = document.createElement("div");
+    timeRow.className = "form-row";
+
+    const startInput = document.createElement("input");
+    startInput.type = "time";
+    startInput.className = "input time-input";
+    startInput.value = (tour.start_time || "").slice(0, 5);
+
+    const endInput = document.createElement("input");
+    endInput.type = "time";
+    endInput.className = "input time-input";
+    endInput.value = (tour.end_time || "").slice(0, 5);
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "primary";
+    saveBtn.textContent = "Save time";
+    saveBtn.addEventListener("click", async () => {
+      if (!startInput.value || !endInput.value) return;
+      if (startInput.value >= endInput.value) return;
+      const { error } = await supabase
+        .from("tours")
+        .update({ start_time: startInput.value, end_time: endInput.value })
+        .eq("id", tour.id);
+      if (!error) {
+        await loadMonthTours();
+      }
+    });
+
+    timeRow.appendChild(startInput);
+    timeRow.appendChild(endInput);
+    timeRow.appendChild(saveBtn);
+    modalBody.appendChild(timeRow);
+  }
 
   if (isOwner && !isPast) {
     const deleteRow = document.createElement("div");
@@ -605,14 +642,6 @@ async function showDetails(iso) {
   startInput.type = "time";
   startInput.className = "input time-input";
 
-  const endInput = document.createElement("input");
-  endInput.type = "time";
-  endInput.className = "input time-input";
-
-  startInput.addEventListener("change", () => {
-    endInput.value = addMinutesToTime(startInput.value, 90);
-  });
-
   const typeSelect = createTourTypeSelect(tourTypes[0]?.name);
 
   const addBtn = document.createElement("button");
@@ -624,14 +653,11 @@ async function showDetails(iso) {
       alert("Please create a tour type first.");
       return;
     }
-    if (!startInput.value || !endInput.value) {
-      alert("Please fill start and end time.");
+    if (!startInput.value) {
+      alert("Please fill start time.");
       return;
     }
-    if (startInput.value >= endInput.value) {
-      alert("End time must be after start time.");
-      return;
-    }
+    const endValue = addMinutesToTime(startInput.value, 90);
     const selectedGuide = guideSelect.value || session.user.id;
     const status = selectedGuide === session.user.id ? "accepted" : "pending";
     const { data: conflicts } = await supabase
@@ -640,7 +666,7 @@ async function showDetails(iso) {
       .eq("guide_id", selectedGuide)
       .eq("date", iso)
       .eq("status", "accepted")
-      .lte("start_time", endInput.value)
+      .lte("start_time", endValue)
       .gte("end_time", startInput.value);
     if (conflicts && conflicts.length > 0) {
       alert("Time conflict with another accepted tour.");
@@ -652,7 +678,7 @@ async function showDetails(iso) {
       status,
       date: iso,
       start_time: startInput.value,
-      end_time: endInput.value,
+      end_time: endValue,
       type: typeSelect.value,
     });
     if (!error) {
@@ -661,7 +687,6 @@ async function showDetails(iso) {
   });
 
   createForm.appendChild(startInput);
-  createForm.appendChild(endInput);
   createForm.appendChild(typeSelect);
   createForm.appendChild(guideSelect);
   createForm.appendChild(addBtn);
