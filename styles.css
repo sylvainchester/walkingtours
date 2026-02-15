@@ -69,6 +69,7 @@ h1 {
   background: transparent;
   border: none;
   padding: 0;
+  flex-wrap: nowrap;
 }
 
 .ghost {
@@ -85,6 +86,9 @@ h1 {
 #toursToggle {
   background: transparent;
   border-color: var(--cell-border);
+  white-space: nowrap;
+  padding-left: 14px;
+  padding-right: 14px;
 }
 
 #toursToggle.only {
@@ -117,6 +121,7 @@ h1 {
   font-size: 16px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 .avatar-menu {
