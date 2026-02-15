@@ -28,19 +28,21 @@ body {
 }
 
 .app {
+  width: 100%;
   max-width: 980px;
   margin: 0 auto;
   padding: 20px 16px 28px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  height: 100vh;
+  height: 100dvh;
   min-height: 0;
+  box-sizing: border-box;
 }
 
 .main-page {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -361,6 +363,7 @@ h1 {
   padding: 10px;
   flex: 0 0 auto;
   --cell: min(11vw, 8.3vh, 52px);
+  overflow: hidden;
 }
 
 .weekdays {
@@ -397,6 +400,7 @@ h1 {
   position: relative;
   background: #ffffff;
   transition: transform 120ms ease, box-shadow 120ms ease;
+  overflow: hidden;
 }
 
 .day:hover {
@@ -487,7 +491,6 @@ h1 {
   min-height: 0;
   overflow: hidden;
   margin-top: 0;
-  max-height: calc(100vh - 360px);
 }
 
 .day-panel .details-content {
