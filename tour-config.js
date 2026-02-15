@@ -128,7 +128,7 @@ function renderTypeModal(type) {
   const priceWrap = makeLabeled("Ticket price", priceInput);
   const commissionWrap = makeLabeled("Commission %", commissionInput);
   const orgNameWrap = makeLabeled("Invoice org name", orgNameInput);
-  const orgAddressWrap = makeLabeled("Invoice address", orgAddressInput);
+  const orgAddressWrap = makeLabeled("Invoice email", orgAddressInput);
   const feeWrap = makeLabeled("Fee per participant", feeInput);
   const descWrap = makeLabeled("Description", descInput);
 

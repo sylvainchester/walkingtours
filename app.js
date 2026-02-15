@@ -162,11 +162,17 @@ async function loadGuideProfileById(guideId) {
 async function loadTourTypeForTour(tour) {
   const { data } = await supabase
     .from("tour_types")
-    .select("name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name")
+    .select("name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address")
     .eq("guide_id", tour.guide_id)
     .eq("name", tour.type)
     .maybeSingle();
   return data || null;
+}
+
+function extractEmail(value) {
+  if (!value) return null;
+  const match = String(value).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0] : null;
 }
 
 async function generateInvoicePdf(tour) {
@@ -941,6 +947,46 @@ function renderTourModal(tour) {
       });
       invoiceRow.appendChild(invoiceLink);
       modalBody.appendChild(invoiceRow);
+
+      const sendRow = document.createElement("div");
+      sendRow.className = "form-row";
+      const sendBtn = document.createElement("button");
+      sendBtn.type = "button";
+      sendBtn.className = "ghost";
+      sendBtn.textContent = "Send invoice email";
+      sendBtn.addEventListener("click", async () => {
+        const [typeInfo, guideInfo] = await Promise.all([
+          loadTourTypeForTour(tour),
+          loadGuideProfileById(tour.guide_id),
+        ]);
+        const toEmail = extractEmail(typeInfo?.invoice_org_address);
+        if (!toEmail) {
+          alert("Invoice email is missing in Tour configuration.");
+          return;
+        }
+        const { data, error } = await supabase.storage
+          .from("invoices")
+          .createSignedUrl(tour.invoice_path, 60 * 30);
+        if (error || !data?.signedUrl) {
+          alert(`Invoice link error: ${error?.message || "Unknown error"}`);
+          return;
+        }
+        const guideName = guideInfo
+          ? `${guideInfo.first_name || ""} ${guideInfo.last_name || ""}`.trim()
+          : "Unknown guide";
+        const guideEmail = extractEmail(guideInfo?.email);
+        const start = (tour.start_time || "").slice(0, 5);
+        const end = (tour.end_time || "").slice(0, 5);
+        const whenText = end ? `${tour.date} ${start}-${end}` : `${tour.date} ${start}`;
+        const subject = encodeURIComponent(`Invoice - ${tour.type} - ${tour.date}`);
+        const body = encodeURIComponent(
+          `Hello,\n\nPlease find attached/linked the invoice related to the tour "${tour.type}" completed on ${whenText} by guide "${guideName}".\n\nInvoice link:\n${data.signedUrl}\n\nBest regards`
+        );
+        const cc = guideEmail ? `&cc=${encodeURIComponent(guideEmail)}` : "";
+        window.location.href = `mailto:${encodeURIComponent(toEmail)}?subject=${subject}${cc}&body=${body}`;
+      });
+      sendRow.appendChild(sendBtn);
+      modalBody.appendChild(sendRow);
     }
   } else if (tour.status !== "accepted") {
     const pendingNote = document.createElement("div");
