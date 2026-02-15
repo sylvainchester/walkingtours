@@ -46,9 +46,26 @@ export async function sendPush(supabase, payload) {
   if (!supabase) return;
   await supabase.auth.refreshSession();
   const { data } = await supabase.auth.getSession();
-  if (!data?.session?.access_token) return;
-  const { error } = await supabase.functions.invoke("send-push", { body: payload });
-  if (error) {
-    console.error("push invoke error", error.message || error);
+  const accessToken = data?.session?.access_token;
+  if (!accessToken) return;
+
+  const response = await fetch("/api/send-push", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    console.error("push api error", response.status, text);
+    return;
+  }
+
+  const result = await response.json();
+  if (result?.failed > 0) {
+    console.error("push delivery failed", result);
   }
 }

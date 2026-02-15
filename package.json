@@ -1,6 +1,9 @@
 {
   "name": "walkingtours",
   "private": true,
+  "dependencies": {
+    "web-push": "^3.6.7"
+  },
   "scripts": {
     "build": "node build-config.js"
   }
