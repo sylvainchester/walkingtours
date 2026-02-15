@@ -1,4 +1,4 @@
-import { SUPABASE_ANON_KEY, SUPABASE_FUNCTIONS_URL, VAPID_PUBLIC_KEY } from "./config.js";
+import { VAPID_PUBLIC_KEY } from "./config.js";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -43,17 +43,11 @@ export async function ensurePushSubscription(supabase, session) {
 }
 
 export async function sendPush(supabase, payload) {
-  if (!SUPABASE_FUNCTIONS_URL || !supabase) return;
+  if (!supabase) return;
   const { data } = await supabase.auth.getSession();
-  const accessToken = data?.session?.access_token;
-  if (!accessToken) return;
-  await fetch(`${SUPABASE_FUNCTIONS_URL}/send-push`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  if (!data?.session?.access_token) return;
+  const { error } = await supabase.functions.invoke("send-push", { body: payload });
+  if (error) {
+    console.error("push invoke error", error.message || error);
+  }
 }
