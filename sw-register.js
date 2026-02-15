@@ -15,6 +15,15 @@ document.addEventListener("visibilitychange", () => {
 
 requestWakeLock();
 
+function setViewportHeightVar() {
+  const vh = (window.visualViewport?.height || window.innerHeight) * 0.01;
+  document.documentElement.style.setProperty("--vh", `${vh}px`);
+}
+
+window.addEventListener("resize", setViewportHeightVar);
+window.visualViewport?.addEventListener("resize", setViewportHeightVar);
+setViewportHeightVar();
+
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./service-worker.js").then((reg) => {
     reg.update();
