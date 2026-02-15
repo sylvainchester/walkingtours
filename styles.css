@@ -122,6 +122,11 @@ h1 {
   text-decoration: none;
 }
 
+.ghost.danger {
+  border-color: #e62e2e;
+  color: #e62e2e;
+}
+
 .icon-btn {
   width: 30px;
   height: 30px;
@@ -280,6 +285,13 @@ h1 {
 
 .field .input {
   font-size: 14px;
+}
+
+.field .checkbox {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  justify-self: start;
 }
 
 .form-col {
@@ -672,6 +684,16 @@ h1 {
   padding: 6px 8px;
   border-radius: 10px;
   background: #fffdf7;
+}
+
+.participant.arrived {
+  background: #e6f6e6;
+  border-color: #b7e2b7;
+}
+
+.participant.absent {
+  background: #fde7e7;
+  border-color: #f2b3b3;
 }
 
 @media (max-width: 720px) {

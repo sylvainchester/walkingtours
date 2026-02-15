@@ -132,6 +132,10 @@ function toggleMenu() {
   }
 }
 
+function isPrivateForViewer(tour) {
+  return Boolean(tour?.is_private) && tour?.guide_id !== session?.user?.id;
+}
+
 async function loadSharedGuides() {
   sharedGuideIds = new Set();
   sharedGuideProfiles = new Map();
@@ -169,7 +173,7 @@ async function loadTourTypes() {
   if (!session || sharedGuideIds.size === 0) return;
   const { data, error } = await supabase
     .from("tour_types")
-    .select("id,guide_id,name")
+    .select("id,guide_id,name,shareable")
     .order("name");
   if (error || !data) return;
   tourTypes = data;
@@ -220,7 +224,7 @@ async function loadMonthTours() {
   const { start, end } = getMonthRange(viewYear, viewMonth);
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,participants(id,name,group_size),guide_id,created_by,status")
+    .select("id,date,start_time,end_time,type,is_private,participants(id,name,group_size,attendance_status),guide_id,created_by,status,participants_locked")
     .gte("date", start)
     .lte("date", end)
     .in("guide_id", guideIds)
@@ -329,9 +333,9 @@ function createTourTypeSelect(value) {
   }
   tourTypes.forEach((type) => {
     const option = document.createElement("option");
-    option.value = type.name;
+    option.value = type.id;
     option.textContent = type.name;
-    if (value === type.name) option.selected = true;
+    if (value === type.id) option.selected = true;
     select.appendChild(option);
   });
   return select;
@@ -368,14 +372,16 @@ function renderTourModal(tour) {
     ? `${profile.first_name} ${profile.last_name}`
     : "Unknown";
   const isPast = tour.date < getTodayISO();
+  const isPrivate = isPrivateForViewer(tour);
 
   const headerRow = document.createElement("div");
   headerRow.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}`;
-  headerRow.textContent = `${(tour.start_time || "").slice(0, 5)} - ${(tour.end_time || "").slice(0, 5)} · ${guideName} · ${tour.type}`;
+  headerRow.textContent = `${(tour.start_time || "").slice(0, 5)} - ${(tour.end_time || "").slice(0, 5)} · ${guideName} · ${isPrivate ? "Private tour" : tour.type}`;
   modalBody.appendChild(headerRow);
 
   const isOwner = session && tour.guide_id === session.user.id;
-  const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast;
+  const isLocked = Boolean(tour.participants_locked);
+  const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast && !isLocked && !isPrivate;
   const canEditTour = Boolean(isOwner) && !isPast;
 
   if (canEditTour) {
@@ -469,6 +475,14 @@ function renderTourModal(tour) {
     modalBody.appendChild(actions);
   }
 
+  if (isPrivate) {
+    const privateNote = document.createElement("div");
+    privateNote.className = "muted";
+    privateNote.textContent = "This tour is private.";
+    modalBody.appendChild(privateNote);
+    return;
+  }
+
   const participantsTitle = document.createElement("div");
   participantsTitle.className = "details-title";
   participantsTitle.textContent = "Participants";
@@ -484,25 +498,45 @@ function renderTourModal(tour) {
   } else {
     tour.participants.forEach((p) => {
       const row = document.createElement("div");
-      row.className = "participant";
+      row.className = `participant${p.attendance_status ? ` ${p.attendance_status}` : ""}`;
 
       const name = document.createElement("div");
       name.textContent = `${p.name} (${p.group_size})`;
       row.appendChild(name);
 
       if (canEditParticipants) {
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "ghost";
-        remove.textContent = "Remove";
-        remove.addEventListener("click", async () => {
-          if (!confirm("Remove this participant?")) return;
-          const { error } = await supabase.from("participants").delete().eq("id", p.id);
-          if (!error) {
-            await loadMonthTours();
-          }
+        const actions = document.createElement("div");
+        actions.className = "form-row";
+
+        const arrivedBtn = document.createElement("button");
+        arrivedBtn.type = "button";
+        arrivedBtn.className = "ghost";
+        arrivedBtn.textContent = "✓";
+        arrivedBtn.title = "Arrived";
+        arrivedBtn.addEventListener("click", async () => {
+          const { error } = await supabase
+            .from("participants")
+            .update({ attendance_status: "arrived" })
+            .eq("id", p.id);
+          if (!error) await loadMonthTours();
         });
-        row.appendChild(remove);
+
+        const absentBtn = document.createElement("button");
+        absentBtn.type = "button";
+        absentBtn.className = "ghost danger";
+        absentBtn.textContent = "✕";
+        absentBtn.title = "No show";
+        absentBtn.addEventListener("click", async () => {
+          const { error } = await supabase
+            .from("participants")
+            .update({ attendance_status: "absent" })
+            .eq("id", p.id);
+          if (!error) await loadMonthTours();
+        });
+
+        actions.appendChild(arrivedBtn);
+        actions.appendChild(absentBtn);
+        row.appendChild(actions);
       }
 
       list.appendChild(row);
@@ -611,6 +645,32 @@ function renderTourModal(tour) {
   }
 
   modalBody.appendChild(list);
+
+  if (isOwner && !isLocked) {
+    const lockRow = document.createElement("div");
+    lockRow.className = "form-row";
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.className = "ghost danger";
+    lockBtn.textContent = "Lock participants";
+    lockBtn.addEventListener("click", async () => {
+      if (!confirm("Lock participants permanently? This cannot be undone.")) return;
+      const { error } = await supabase
+        .from("tours")
+        .update({ participants_locked: true })
+        .eq("id", tour.id);
+      if (!error) {
+        await loadMonthTours();
+      }
+    });
+    lockRow.appendChild(lockBtn);
+    modalBody.appendChild(lockRow);
+  } else if (isLocked) {
+    const lockedNote = document.createElement("div");
+    lockedNote.className = "muted";
+    lockedNote.textContent = "Participants are locked.";
+    modalBody.appendChild(lockedNote);
+  }
 }
 
 async function loadTesseract() {
@@ -627,35 +687,60 @@ async function loadTesseract() {
 function parseParticipantsFromText(text) {
   const lines = text
     .split("\n")
-    .map((l) => l.trim())
+    .map((l) => l.replace(/\s+/g, " ").trim())
     .filter(Boolean);
 
-  const ignore = /reservas|buscar|gu[ií]a|selecciona|enviar|mensaje|difusi[oó]n/i;
+  const ignore = /reservas|buscar|gu[ií]a|selecciona|enviar|mensaje|difusi[oó]n|evento|confirmado|disponible/i;
   const participants = [];
-  let lastName = null;
+  let pendingName = null;
+
+  const extractGroupSize = (line) => {
+    const matches = Array.from(line.matchAll(/(\d+)\s*(adult|adults|niñ|nino|niño|nina|niña)/gi));
+    if (!matches.length) return 0;
+    return matches.reduce((sum, m) => sum + Number(m[1]), 0);
+  };
+
+  const cleanName = (line) => {
+    let name = line;
+    name = name.replace(/^\W*\d+\s+/, ""); // remove leading index number
+    name = name.replace(/\s*(\d+\s*(adult|adults|niñ|nino|niño|nina|niña).*)$/i, "");
+    name = name.replace(/^[\[\(]+|[\]\)]+$/g, "").trim();
+    return name;
+  };
 
   for (const line of lines) {
     if (ignore.test(line)) continue;
-    const hasNumber = /\d/.test(line);
-    if (!hasNumber) {
-      lastName = line;
+
+    const groupSize = extractGroupSize(line);
+    if (groupSize > 0) {
+      const name = cleanName(line);
+      if (name.length >= 2) {
+        participants.push({ name, group_size: groupSize });
+        pendingName = null;
+        continue;
+      }
+      if (pendingName) {
+        participants.push({ name: pendingName, group_size: groupSize });
+        pendingName = null;
+      }
       continue;
     }
-    if (lastName) {
-      const nums = line.match(/\d+/g) || [];
-      const groupSize = nums.reduce((sum, n) => sum + Number(n), 0);
-      if (groupSize > 0) {
-        participants.push({ name: lastName, group_size: groupSize });
-      }
-      lastName = null;
+
+    // likely a name line
+    if (!/\d/.test(line) && line.length >= 2) {
+      pendingName = line;
     }
   }
+
   return participants;
 }
 
 async function extractParticipantsFromImage(file) {
   await loadTesseract();
   const { data } = await window.Tesseract.recognize(file, "spa+por+eng");
+  console.log("OCR_TEXT_START");
+  console.log(data.text || "");
+  console.log("OCR_TEXT_END");
   return parseParticipantsFromText(data.text || "");
 }
 
@@ -666,6 +751,7 @@ function renderTourItem(tour) {
     : "Unknown";
 
   const tourIsPast = tour.date < getTodayISO();
+  const isPrivate = isPrivateForViewer(tour);
   const row = document.createElement("button");
   row.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}${tourIsPast ? " past" : ""}`;
   row.type = "button";
@@ -673,7 +759,7 @@ function renderTourItem(tour) {
 
   const time = (tour.start_time || "").slice(0, 5);
   const text = document.createElement("div");
-  text.textContent = `${time} · ${guideName} · ${tour.type}`;
+  text.textContent = `${time} · ${guideName} · ${isPrivate ? "Private tour" : tour.type}`;
 
   row.appendChild(text);
   return row;
@@ -749,7 +835,7 @@ async function showDetails(iso) {
   startInput.type = "time";
   startInput.className = "input time-input";
 
-  const typeSelect = createTourTypeSelect(tourTypes[0]?.name);
+  const typeSelect = createTourTypeSelect(tourTypes[0]?.id);
 
   const addBtn = document.createElement("button");
   addBtn.type = "button";
@@ -766,6 +852,11 @@ async function showDetails(iso) {
     }
     const endValue = addMinutesToTime(startInput.value, 90);
     const selectedGuide = guideSelect.value || session.user.id;
+    const selectedType = tourTypes.find((type) => type.id === typeSelect.value);
+    if (!selectedType) {
+      alert("Please select a tour type.");
+      return;
+    }
     const status = selectedGuide === session.user.id ? "accepted" : "pending";
     const { data: conflicts } = await supabase
       .from("tours")
@@ -786,7 +877,8 @@ async function showDetails(iso) {
       date: iso,
       start_time: startInput.value,
       end_time: endValue,
-      type: typeSelect.value,
+      type: selectedType.name,
+      is_private: selectedType.shareable === false,
     });
     if (!error) {
       await loadMonthTours();
