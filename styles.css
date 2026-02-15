@@ -54,8 +54,7 @@ body {
   gap: 12px;
   flex-wrap: wrap;
   position: relative;
-  --avatar-space: 56px;
-  padding-right: var(--avatar-space);
+  padding-right: 0;
 }
 
 .eyebrow {
@@ -83,9 +82,17 @@ h1 {
   max-width: 100%;
 }
 
+.nav-month {
+  width: 100%;
+}
+
+.nav-month #toursToggle {
+  margin-left: auto;
+}
+
 .nav-right {
   margin-left: auto;
-  margin-right: calc(-1 * var(--avatar-space));
+  margin-right: 0;
   width: 100%;
   justify-content: flex-end;
 }
@@ -94,7 +101,15 @@ h1 {
   justify-content: flex-end;
   text-align: right;
   margin-left: auto;
+  margin-right: 0;
+  width: 100%;
 }
+
+.nav-right .label span {
+  margin-left: auto;
+  margin-right: 6px;
+}
+
 
 .ghost {
   border: 1px solid var(--cell-border);
@@ -245,11 +260,13 @@ h1 {
   letter-spacing: 0.08em;
   color: var(--muted);
   max-width: 100%;
+  flex: 1 1 auto;
 }
 
 .label select {
   font-size: 14px;
   max-width: 100%;
+  margin-left: auto;
 }
 
 .field {
@@ -661,7 +678,6 @@ h1 {
   h1 { font-size: 28px; }
   .day { font-size: 16px; }
   .badge { font-size: 10px; }
-  .topbar { padding-right: 48px; }
 }
 
 @media (max-width: 520px) {
