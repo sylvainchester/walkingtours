@@ -55,27 +55,39 @@ serve(async (req) => {
     const { default: webpush } = await import("https://esm.sh/web-push@3.6.7?target=deno&bundle");
     webpush.setVapidDetails("mailto:admin@example.com", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
-    const payload = JSON.stringify({ title, body: message, data });
+    // Supabase Edge runtime lacks crypto.ECDH used by encrypted payloads.
+    // Keep push payload empty so delivery still works.
+    const payload = undefined;
+
+    let sent = 0;
+    let failed = 0;
+    let removed = 0;
+    const errors: string[] = [];
 
     for (const sub of subs) {
       try {
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth },
-          },
-          payload
-        );
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth },
+        }, payload);
+        sent += 1;
       } catch (err) {
-        console.error("push send error", err);
+        failed += 1;
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(msg);
+        console.error("push send error", msg);
         const status = err?.statusCode || err?.status || 0;
         if (status === 404 || status === 410) {
           await supabase.from("push_subscriptions").delete().eq("id", sub.id);
+          removed += 1;
         }
       }
     }
 
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(
+      JSON.stringify({ ok: true, sent, failed, removed, total: subs.length, errors }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (err) {
     console.error("send-push fatal", err);
     const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);

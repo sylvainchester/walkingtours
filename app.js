@@ -382,47 +382,12 @@ function renderTourModal(tour) {
   modalBody.appendChild(headerRow);
 
   const isOwner = session && tour.guide_id === session.user.id;
+  const isCreator = session && tour.created_by === session.user.id;
   const isLocked = Boolean(tour.participants_locked);
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast && !isLocked && !isPrivate;
-  const canEditTour = Boolean(isOwner) && !isPast;
+  const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
 
-  if (canEditTour) {
-    const timeRow = document.createElement("div");
-    timeRow.className = "form-row";
-
-    const startInput = document.createElement("input");
-    startInput.type = "time";
-    startInput.className = "input time-input";
-    startInput.value = (tour.start_time || "").slice(0, 5);
-
-    const endInput = document.createElement("input");
-    endInput.type = "time";
-    endInput.className = "input time-input";
-    endInput.value = (tour.end_time || "").slice(0, 5);
-
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.className = "primary";
-    saveBtn.textContent = "Save time";
-    saveBtn.addEventListener("click", async () => {
-      if (!startInput.value || !endInput.value) return;
-      if (startInput.value >= endInput.value) return;
-      const { error } = await supabase
-        .from("tours")
-        .update({ start_time: startInput.value, end_time: endInput.value })
-        .eq("id", tour.id);
-      if (!error) {
-        await loadMonthTours();
-      }
-    });
-
-    timeRow.appendChild(startInput);
-    timeRow.appendChild(endInput);
-    timeRow.appendChild(saveBtn);
-    modalBody.appendChild(timeRow);
-  }
-
-  if (isOwner && !isPast) {
+  if (canDeleteTour) {
     const deleteRow = document.createElement("div");
     deleteRow.className = "form-row";
     const deleteBtn = document.createElement("button");
@@ -433,6 +398,14 @@ function renderTourModal(tour) {
       if (!confirm("Delete this tour?")) return;
       const { error } = await supabase.from("tours").delete().eq("id", tour.id);
       if (!error) {
+        if (isCreator && tour.guide_id !== session.user.id) {
+          await sendPush(supabase, {
+            to_user_id: tour.guide_id,
+            title: "Tour removed",
+            body: `A planned tour on ${tour.date} was deleted.`,
+            data: { url: "./index.html" },
+          });
+        }
         closeTourModal();
         await loadMonthTours();
       }
