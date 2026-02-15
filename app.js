@@ -241,8 +241,11 @@ async function generateInvoicePdf(tour) {
   mount.querySelectorAll("img").forEach((img) => img.remove());
   document.body.appendChild(mount);
 
+  // Let the browser fully layout the injected invoice before capture.
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
   await loadHtml2Pdf();
-  const blob = await window.html2pdf()
+  const pdfArrayBuffer = await window.html2pdf()
     .set({
       margin: 0,
       filename: `${invoiceNo}.pdf`,
@@ -252,7 +255,9 @@ async function generateInvoicePdf(tour) {
     })
     .from(mount)
     .toPdf()
-    .output("blob");
+    .output("arraybuffer");
+
+  const blob = new Blob([pdfArrayBuffer], { type: "application/pdf" });
 
   document.body.removeChild(mount);
   return { blob, invoiceNo };
@@ -375,7 +380,7 @@ async function loadMonthTours() {
   const { start, end } = getMonthRange(viewYear, viewMonth);
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,is_private,participants(id,name,group_size,attendance_status),guide_id,created_by,status,participants_locked")
+    .select("id,date,start_time,end_time,type,is_private,invoice_path,participants(id,name,group_size,attendance_status),guide_id,created_by,status,participants_locked")
     .gte("date", start)
     .lte("date", end)
     .in("guide_id", guideIds)
@@ -556,6 +561,15 @@ function renderTourModal(tour) {
     deleteBtn.textContent = "Delete tour";
     deleteBtn.addEventListener("click", async () => {
       if (!confirm("Delete this tour?")) return;
+      if (tour.invoice_path) {
+        const { error: storageError } = await supabase.storage
+          .from("invoices")
+          .remove([tour.invoice_path]);
+        if (storageError) {
+          alert(`Invoice delete error: ${storageError.message}`);
+          return;
+        }
+      }
       const { data: deletedRows, error } = await supabase
         .from("tours")
         .delete()
