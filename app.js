@@ -868,20 +868,28 @@ function renderTourModal(tour) {
       if (!confirm("Lock participants permanently? This cannot be undone.")) return;
       let filePath = null;
       try {
-        const { blob, invoiceNo } = await generateInvoicePdf(tour);
-        filePath = `${tour.guide_id}/${tour.date}/${tour.id}/${invoiceNo}.pdf`;
-        const { error: uploadError } = await supabase.storage
-          .from("invoices")
-          .upload(filePath, blob, {
-            contentType: "application/pdf",
-            upsert: true,
-          });
-        if (uploadError) {
-          alert(`Invoice upload error: ${uploadError.message}`);
+        const { data: authData } = await supabase.auth.getSession();
+        const accessToken = authData?.session?.access_token;
+        if (!accessToken) {
+          alert("Auth session missing.");
           return;
         }
+        const response = await fetch("/api/generate-invoice", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ tour_id: tour.id }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result?.ok || !result?.filePath) {
+          alert(`Invoice generation error: ${result?.error || "Unknown error"}`);
+          return;
+        }
+        filePath = result.filePath;
       } catch (invoiceError) {
-        alert(`Invoice generation error: ${invoiceError.message || invoiceError}`);
+        alert(`Invoice generation error: ${invoiceError?.message || invoiceError}`);
         return;
       }
       const { error } = await supabase
