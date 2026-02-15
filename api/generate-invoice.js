@@ -153,8 +153,13 @@ module.exports = async (req, res) => {
 
     const templatePath = path.join(process.cwd(), "invoice.html");
     const template = fs.readFileSync(templatePath, "utf8");
-    const sanitized = template.replace(/<img[\s\S]*?>/gi, "");
-    const html = replaceTokens(sanitized, {
+    let iconSrc = "";
+    const iconPath = path.join(process.cwd(), "icon.png");
+    if (fs.existsSync(iconPath)) {
+      const iconBase64 = fs.readFileSync(iconPath).toString("base64");
+      iconSrc = `data:image/png;base64,${iconBase64}`;
+    }
+    const html = replaceTokens(template, {
       invoiceNo,
       guideFirstName: profile.first_name || "",
       guideLastName: profile.last_name || "",
@@ -172,6 +177,7 @@ module.exports = async (req, res) => {
       bankSortCode: profile.sort_code || "",
       bankAccountNumber: profile.account_number || "",
       bankEmail: profile.email || "",
+      iconSrc,
     });
 
     const pdfBuffer = await renderPdfFromHtml(html);
@@ -189,4 +195,3 @@ module.exports = async (req, res) => {
     return json(res, 500, { ok: false, error: error?.message || String(error) });
   }
 };
-
