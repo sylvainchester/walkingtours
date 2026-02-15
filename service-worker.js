@@ -1,4 +1,4 @@
-const CACHE_NAME = "walkingtours-v14";
+const CACHE_NAME = "walkingtours-v15";
 const ASSETS = [
   "./",
   "./index.html",
@@ -41,8 +41,31 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  const url = new URL(req.url);
+
+  // Network-first for navigations and core assets to avoid stale updates
+  const isHtml = req.mode === "navigate" || url.pathname.endsWith(".html");
+  const isCore =
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".css") ||
+    url.pathname.endsWith(".webmanifest");
+
+  if (isHtml || isCore) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    caches.match(req).then((cached) => cached || fetch(req))
   );
 });
 
