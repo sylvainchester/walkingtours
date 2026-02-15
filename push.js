@@ -42,13 +42,16 @@ export async function ensurePushSubscription(supabase, session) {
   );
 }
 
-export async function sendPush(session, payload) {
-  if (!SUPABASE_FUNCTIONS_URL || !session) return;
+export async function sendPush(supabase, payload) {
+  if (!SUPABASE_FUNCTIONS_URL || !supabase) return;
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data?.session?.access_token;
+  if (!accessToken) return;
   await fetch(`${SUPABASE_FUNCTIONS_URL}/send-push`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
   });

@@ -235,7 +235,7 @@ async function loadPendingInvites() {
         }
 
         if (invite.from_guide_id !== session.user.id) {
-          await sendPush(session, {
+          await sendPush(supabase, {
             to_user_id: invite.from_guide_id,
             title: "Share accepted",
             body: "Your calendar share was accepted.",
@@ -261,7 +261,7 @@ async function loadPendingInvites() {
           return;
         }
         if (invite.from_guide_id !== session.user.id) {
-          await sendPush(session, {
+          await sendPush(supabase, {
             to_user_id: invite.from_guide_id,
             title: "Share declined",
             body: "Your calendar share was declined.",
@@ -359,7 +359,7 @@ async function handleShare() {
   }
 
   setStatus("Invite sent. Waiting for acceptance.");
-  await sendPush(session, {
+  await sendPush(supabase, {
     to_user_id: targetId,
     title: "Share invite",
     body: "You have a new calendar share invite.",

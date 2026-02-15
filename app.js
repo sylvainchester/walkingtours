@@ -456,7 +456,7 @@ function renderTourModal(tour) {
         .eq("id", tour.id);
       if (!error) {
         if (tour.created_by && tour.created_by !== session.user.id) {
-          await sendPush(session, {
+          await sendPush(supabase, {
             to_user_id: tour.created_by,
             title: "Tour accepted",
             body: `${guideName} accepted the tour on ${tour.date}.`,
@@ -476,7 +476,7 @@ function renderTourModal(tour) {
       const { error } = await supabase.from("tours").delete().eq("id", tour.id);
       if (!error) {
         if (tour.created_by && tour.created_by !== session.user.id) {
-          await sendPush(session, {
+          await sendPush(supabase, {
             to_user_id: tour.created_by,
             title: "Tour declined",
             body: `${guideName} declined the tour on ${tour.date}.`,
@@ -900,7 +900,7 @@ async function showDetails(iso) {
     });
     if (!error) {
       if (selectedGuide !== session.user.id) {
-        await sendPush(session, {
+        await sendPush(supabase, {
           to_user_id: selectedGuide,
           title: "New tour pending",
           body: `A tour is waiting for your approval on ${iso} at ${(startInput.value || "").slice(0, 5)}.`,
