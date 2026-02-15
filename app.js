@@ -921,6 +921,27 @@ function renderTourModal(tour) {
     lockedNote.className = "muted";
     lockedNote.textContent = "Participants are locked.";
     modalBody.appendChild(lockedNote);
+    if (tour.invoice_path) {
+      const invoiceRow = document.createElement("div");
+      invoiceRow.className = "form-row";
+      const invoiceLink = document.createElement("a");
+      invoiceLink.href = "#";
+      invoiceLink.className = "ghost";
+      invoiceLink.textContent = "Open invoice PDF";
+      invoiceLink.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const { data, error } = await supabase.storage
+          .from("invoices")
+          .createSignedUrl(tour.invoice_path, 60 * 30);
+        if (error || !data?.signedUrl) {
+          alert(`Invoice link error: ${error?.message || "Unknown error"}`);
+          return;
+        }
+        window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      });
+      invoiceRow.appendChild(invoiceLink);
+      modalBody.appendChild(invoiceRow);
+    }
   } else if (tour.status !== "accepted") {
     const pendingNote = document.createElement("div");
     pendingNote.className = "muted";
