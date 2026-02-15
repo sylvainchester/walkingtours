@@ -11,7 +11,6 @@ const shareList = document.getElementById("shareList");
 const pendingList = document.getElementById("pendingList");
 let session = null;
 const signOutBtn = document.getElementById("signOutBtn");
-const enablePushBtn = document.getElementById("enablePushBtn");
 const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
 
@@ -370,15 +369,6 @@ async function handleShare() {
 }
 
 shareBtn.addEventListener("click", handleShare);
-
-if (enablePushBtn) {
-  enablePushBtn.addEventListener("click", async () => {
-    if (!session) return;
-    await ensurePushSubscription(supabase, session);
-    avatarDropdown?.classList.remove("open");
-    alert("Notifications enabled (if allowed by your browser).");
-  });
-}
 
 if (signOutBtn) {
   signOutBtn.addEventListener("click", async () => {

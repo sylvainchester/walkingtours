@@ -18,7 +18,6 @@ const avatarDropdown = document.getElementById("avatarDropdown");
 const signInLink = document.getElementById("signInLink");
 const signUpLink = document.getElementById("signUpLink");
 const signOutBtn = document.getElementById("signOutBtn");
-const enablePushBtn = document.getElementById("enablePushBtn");
 const shareLink = document.getElementById("shareLink");
 const availabilityLink = document.getElementById("availabilityLink");
 const guideFilter = document.getElementById("guideFilter");
@@ -166,7 +165,18 @@ async function loadTourTypeForTour(tour) {
     .eq("guide_id", tour.guide_id)
     .eq("name", tour.type)
     .maybeSingle();
-  return data || null;
+  if (data) return data;
+
+  // Fallback: some existing tours may reference a shared type name owned by another guide.
+  const { data: byName } = await supabase
+    .from("tour_types")
+    .select("guide_id,name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address")
+    .ilike("name", tour.type);
+  if (!byName || byName.length === 0) return null;
+
+  return byName.find((t) => t.guide_id === tour.guide_id)
+    || byName.find((t) => t.guide_id === tour.created_by)
+    || byName[0];
 }
 
 function extractEmail(value) {
@@ -361,7 +371,7 @@ async function loadTourTypes() {
   if (!session || sharedGuideIds.size === 0) return;
   const { data, error } = await supabase
     .from("tour_types")
-    .select("id,guide_id,name,shareable")
+    .select("id,guide_id,name,shareable,payment_type,fee_per_participant")
     .order("name");
   if (error || !data) return;
   tourTypes = data;
@@ -412,7 +422,7 @@ async function loadMonthTours() {
   const { start, end } = getMonthRange(viewYear, viewMonth);
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,is_private,invoice_path,participants(id,name,group_size,attendance_status),guide_id,created_by,status,participants_locked")
+    .select("id,date,start_time,end_time,type,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,attendance_status),guide_id,created_by,status,participants_locked")
     .gte("date", start)
     .lte("date", end)
     .in("guide_id", guideIds)
@@ -573,8 +583,18 @@ function renderTourModal(tour) {
   const isLocked = Boolean(tour.participants_locked);
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast && !isLocked && !isPrivate;
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
+  const typeForTour = tourTypes.find((t) => t.guide_id === tour.guide_id && t.name === tour.type) || null;
+  const isFreeTour = typeForTour?.payment_type === "free" || /free/i.test(String(tour.type || ""));
+  const feePerParticipant = Number(typeForTour?.fee_per_participant || 0);
   const unresolvedParticipants = (tour.participants || []).filter(
     (p) => p.attendance_status !== "arrived" && p.attendance_status !== "absent"
+  );
+  const arrivedParticipants = (tour.participants || []).filter(
+    (p) => p.attendance_status === "arrived"
+  );
+  const arrivedPersonsCount = arrivedParticipants.reduce(
+    (sum, p) => sum + Number(p.group_size || 0),
+    0
   );
   const canLockParticipants = Boolean(session)
     && tour.status === "accepted"
@@ -582,6 +602,7 @@ function renderTourModal(tour) {
     && !isLocked
     && !isPrivate
     && unresolvedParticipants.length === 0
+    && arrivedParticipants.length > 0
     && (isOwner || isCreator);
 
   if (canDeleteTour) {
@@ -872,35 +893,61 @@ function renderTourModal(tour) {
     lockBtn.addEventListener("click", async () => {
       if (!canLockParticipants) return;
       if (!confirm("Lock participants permanently? This cannot be undone.")) return;
-      let filePath = null;
+      const updatePayload = { participants_locked: true };
       try {
-        const { data: authData } = await supabase.auth.getSession();
-        const accessToken = authData?.session?.access_token;
-        if (!accessToken) {
-          alert("Auth session missing.");
-          return;
-        }
-        const response = await fetch("/api/generate-invoice", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
+        const liveType = typeForTour || await loadTourTypeForTour(tour);
+        const nameSuggestsFree = /free/i.test(String(tour.type || ""));
+        const liveIsFreeTour = liveType?.payment_type === "free" || nameSuggestsFree;
+        const liveFeePerParticipant = Number(liveType?.fee_per_participant || feePerParticipant || 0);
+
+        if (liveIsFreeTour) {
+          const typeFromDb = await loadTourTypeForTour(tour);
+          const effectiveFee = Number(typeFromDb?.fee_per_participant ?? liveFeePerParticipant ?? 0);
+          if (!Number.isFinite(effectiveFee) || effectiveFee <= 0) {
+            alert("Fee per participant is missing for this free tour.");
+            return;
+          }
+          updatePayload.free_amount_received = null;
+          updatePayload.platform_due_amount = Number((arrivedPersonsCount * effectiveFee).toFixed(2));
+          updatePayload.invoice_path = null;
+        } else {
+          const isLocalHost = window.location.hostname === "localhost" || window.location.hostname === "0.0.0.0";
+          const invoiceApiUrl = isLocalHost
+            ? "https://walkingtours.vercel.app/api/generate-invoice"
+            : "/api/generate-invoice";
+          const { data: authData } = await supabase.auth.getSession();
+          const accessToken = authData?.session?.access_token;
+          if (!accessToken) {
+            alert("Auth session missing.");
+            return;
+          }
+          const response = await fetch(invoiceApiUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({ tour_id: tour.id }),
         });
-        const result = await response.json();
-        if (!response.ok || !result?.ok || !result?.filePath) {
-          alert(`Invoice generation error: ${result?.error || "Unknown error"}`);
-          return;
+          const contentType = response.headers.get("content-type") || "";
+          const result = contentType.includes("application/json")
+            ? await response.json()
+            : { ok: false, error: await response.text() };
+          if (!response.ok || !result?.ok || !result?.filePath) {
+            alert(`Invoice generation error: ${result?.error || "Unknown error"}`);
+            return;
+          }
+          updatePayload.invoice_path = result.filePath;
+          updatePayload.free_amount_received = null;
+          updatePayload.platform_due_amount = null;
         }
-        filePath = result.filePath;
       } catch (invoiceError) {
         alert(`Invoice generation error: ${invoiceError?.message || invoiceError}`);
         return;
       }
       const { error } = await supabase
         .from("tours")
-        .update({ participants_locked: true, invoice_path: filePath })
+        .update(updatePayload)
         .eq("id", tour.id);
       if (!error) {
         await loadMonthTours();
@@ -918,6 +965,8 @@ function renderTourModal(tour) {
         reason.textContent = "Private tours cannot be locked.";
       } else if (unresolvedParticipants.length > 0) {
         reason.textContent = "Set each participant as arrived or no-show before locking.";
+      } else if (arrivedParticipants.length === 0) {
+        reason.textContent = "At least one participant must be marked as arrived.";
       }
       lockRow.appendChild(reason);
     }
@@ -927,6 +976,55 @@ function renderTourModal(tour) {
     lockedNote.className = "muted";
     lockedNote.textContent = "Participants are locked.";
     modalBody.appendChild(lockedNote);
+    if (isFreeTour) {
+      const freeRow = document.createElement("div");
+      freeRow.className = "form-row";
+
+      const amountInput = document.createElement("input");
+      amountInput.type = "number";
+      amountInput.min = "0";
+      amountInput.step = "0.01";
+      amountInput.className = "input";
+      amountInput.placeholder = "Amount received from participants";
+      amountInput.value = tour.free_amount_received == null ? "" : String(tour.free_amount_received);
+
+      const saveAmountBtn = document.createElement("button");
+      saveAmountBtn.type = "button";
+      saveAmountBtn.className = "ghost";
+      saveAmountBtn.textContent = "Save amount";
+      saveAmountBtn.addEventListener("click", async () => {
+        const amount = Number(amountInput.value || "");
+        if (!Number.isFinite(amount) || amount < 0) {
+          alert("Enter a valid amount received.");
+          return;
+        }
+        const { error } = await supabase
+          .from("tours")
+          .update({ free_amount_received: amount })
+          .eq("id", tour.id);
+        if (error) {
+          alert(`Save amount error: ${error.message}`);
+          return;
+        }
+        await loadMonthTours();
+      });
+
+      freeRow.appendChild(amountInput);
+      freeRow.appendChild(saveAmountBtn);
+      modalBody.appendChild(freeRow);
+
+      const computedPlatformDue = Number((arrivedPersonsCount * feePerParticipant).toFixed(2));
+      const platformDue = computedPlatformDue > 0
+        ? computedPlatformDue
+        : Number(tour.platform_due_amount || 0);
+      const displayUnitFee = arrivedPersonsCount > 0
+        ? Number((platformDue / arrivedPersonsCount).toFixed(2))
+        : Number(feePerParticipant || 0);
+      const dueText = document.createElement("div");
+      dueText.className = "platform-due-note";
+      dueText.textContent = `Platform due: ${money(platformDue)} (${arrivedPersonsCount} participant${arrivedPersonsCount === 1 ? "" : "s"} x ${money(displayUnitFee)})`;
+      modalBody.appendChild(dueText);
+    }
     if (tour.invoice_path) {
       const invoiceRow = document.createElement("div");
       invoiceRow.className = "form-row";
@@ -1260,14 +1358,6 @@ async function handleAuthSignOut() {
 
 function bindAuth() {
   if (signOutBtn) signOutBtn.addEventListener("click", handleAuthSignOut);
-  if (enablePushBtn) {
-    enablePushBtn.addEventListener("click", async () => {
-      if (!session) return;
-      await ensurePushSubscription(supabase, session);
-      closeMenu();
-      alert("Notifications enabled (if allowed by your browser).");
-    });
-  }
   if (avatarButton) avatarButton.addEventListener("click", toggleMenu);
   if (modalClose) modalClose.addEventListener("click", closeTourModal);
   if (tourModal) {

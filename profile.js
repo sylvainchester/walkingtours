@@ -11,7 +11,6 @@ const accountName = document.getElementById("accountName");
 const saveProfile = document.getElementById("saveProfile");
 const profileStatus = document.getElementById("profileStatus");
 const signOutBtn = document.getElementById("signOutBtn");
-const enablePushBtn = document.getElementById("enablePushBtn");
 const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
 
@@ -79,15 +78,6 @@ if (signOutBtn) {
   signOutBtn.addEventListener("click", async () => {
     await supabase.auth.signOut();
     window.location.href = "sign-in.html";
-  });
-}
-
-if (enablePushBtn) {
-  enablePushBtn.addEventListener("click", async () => {
-    if (!session) return;
-    await ensurePushSubscription(supabase, session);
-    avatarDropdown?.classList.remove("open");
-    alert("Notifications enabled (if allowed by your browser).");
   });
 }
 

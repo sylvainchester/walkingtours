@@ -130,6 +130,9 @@ module.exports = async (req, res) => {
 
     const profile = profileRes.data || {};
     const tourType = typeRes.data || {};
+    if (tourType.payment_type === "free") {
+      return json(res, 400, { ok: false, error: "Free tours do not generate invoices" });
+    }
 
     const personsTotal = computeInvoicePersons(tour.participants || []);
     const unitPrice = Number(
