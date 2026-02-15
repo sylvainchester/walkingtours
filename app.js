@@ -978,14 +978,19 @@ function renderTourModal(tour) {
         const start = (tour.start_time || "").slice(0, 5);
         const end = (tour.end_time || "").slice(0, 5);
         const whenText = end ? `${tour.date} ${start}-${end}` : `${tour.date} ${start}`;
-        const params = new URLSearchParams();
-        params.set("subject", `Invoice - ${tour.type} - ${tour.date}`);
-        params.set(
-          "body",
-          `Hello,\n\nPlease find the invoice related to the tour "${tour.type}" completed on ${whenText} by guide "${guideName}".\n\nThe invoice PDF can be downloaded from the Walking Tours app.\n\nBest regards`
-        );
-        if (guideEmail) params.set("cc", guideEmail);
-        window.location.href = `mailto:${toEmail}?${params.toString()}`;
+        const subject = `Invoice - ${tour.type} - ${tour.date}`;
+        const bodyText =
+          `Hello,\n\n` +
+          `Please find the invoice related to the tour "${tour.type}" completed on ${whenText} by guide "${guideName}".\n\n` +
+          `Invoice PDF link:\n${data.signedUrl}\n\n` +
+          `Best regards`;
+        const ccPart = guideEmail ? `&cc=${encodeURIComponent(guideEmail)}` : "";
+        const mailtoUrl =
+          `mailto:${encodeURIComponent(toEmail)}` +
+          `?subject=${encodeURIComponent(subject)}` +
+          `${ccPart}` +
+          `&body=${encodeURIComponent(bodyText)}`;
+        window.location.href = mailtoUrl;
       });
       sendRow.appendChild(sendBtn);
       modalBody.appendChild(sendRow);
