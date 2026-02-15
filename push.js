@@ -1,4 +1,4 @@
-import { SUPABASE_FUNCTIONS_URL, VAPID_PUBLIC_KEY } from "./config.js";
+import { SUPABASE_ANON_KEY, SUPABASE_FUNCTIONS_URL, VAPID_PUBLIC_KEY } from "./config.js";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -51,6 +51,7 @@ export async function sendPush(supabase, payload) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
