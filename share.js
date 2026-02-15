@@ -158,6 +158,15 @@ async function loadShares() {
       if (deleteError) {
         setStatus(`Delete error: ${deleteError.message}`);
       } else {
+        if (otherId && otherId !== session.user.id) {
+          const removerName = getSessionGuideName();
+          await sendPush(supabase, {
+            to_user_id: otherId,
+            title: "Share removed",
+            body: `${removerName} removed the shared calendar connection.`,
+            data: { url: "./share.html" },
+          });
+        }
         await loadShares();
       }
     });
@@ -342,6 +351,21 @@ async function handleShare() {
 
   const targetId = profiles[0].id;
 
+  const { data: activeShare, error: activeShareError } = await supabase
+    .from("guide_shares")
+    .select("id")
+    .or(`and(guide_id.eq.${session.user.id},shared_with_id.eq.${targetId}),and(guide_id.eq.${targetId},shared_with_id.eq.${session.user.id})`)
+    .limit(1)
+    .maybeSingle();
+  if (activeShareError) {
+    setStatus(`Share error: ${activeShareError.message}`);
+    return;
+  }
+  if (activeShare) {
+    setStatus("Already shared with this guide.");
+    return;
+  }
+
   const { data: existing, error: existingError } = await supabase
     .from("guide_share_invites")
     .select("id,status")
@@ -355,10 +379,6 @@ async function handleShare() {
   }
 
   if (existing) {
-    if (existing.status === "accepted") {
-      setStatus("Already shared with this guide.");
-      return;
-    }
     if (existing.status === "pending") {
       setStatus("Invite already pending.");
       return;
