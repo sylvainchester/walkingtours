@@ -1,10 +1,11 @@
-const CACHE_NAME = "walkingtours-v18";
+const CACHE_NAME = "walkingtours-v19";
 const ASSETS = [
   "./",
   "./index.html",
   "./sign-in.html",
   "./sign-up.html",
   "./recover.html",
+  "./reset-password.html",
   "./share.html",
   "./availability.html",
   "./profile.html",
@@ -12,6 +13,7 @@ const ASSETS = [
   "./styles.css",
   "./app.js",
   "./auth.js",
+  "./reset-password.js",
   "./share.js",
   "./availability.js",
   "./profile.js",
