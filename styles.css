@@ -8,7 +8,6 @@
   --cell-border: rgba(0, 0, 0, 0.16);
   --focus: #1a1a1a;
   --card: #fffdf2;
-  color-scheme: light;
 }
 
 * {
@@ -18,7 +17,6 @@
 html,
 body {
   height: 100%;
-  background: #f6f1d4;
 }
 
 body {
@@ -28,15 +26,6 @@ body {
   color: var(--ink);
   overflow: hidden;
   overflow-x: hidden;
-  color-scheme: light;
-  -webkit-text-fill-color: var(--ink);
-}
-
-input,
-select,
-textarea,
-button {
-  color-scheme: light;
 }
 
 .app {
@@ -400,8 +389,6 @@ h1 {
   font-size: 15px;
   font-family: inherit;
   background: #fff;
-  color: var(--ink);
-  -webkit-text-fill-color: var(--ink);
 }
 
 .auth-fields select {
@@ -710,9 +697,6 @@ h1 {
   font-size: 14px;
   font-family: inherit;
   background: #fff;
-  color: var(--ink);
-  -webkit-text-fill-color: var(--ink);
-  appearance: none;
 }
 
 .time-input {
