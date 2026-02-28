@@ -16,6 +16,17 @@ function setStatus(message) {
   if (authStatus) authStatus.textContent = message || "";
 }
 
+async function isEmailAllowedForSignup(email) {
+  const { data, error } = await supabase.rpc("is_signup_email_whitelisted", {
+    p_email: email,
+  });
+  if (error) {
+    setStatus(`Whitelist check error: ${error.message}`);
+    return false;
+  }
+  return Boolean(data);
+}
+
 async function handleSignIn() {
   const email = authEmail?.value.trim();
   const password = authPassword?.value;
@@ -32,7 +43,7 @@ async function handleSignIn() {
 }
 
 async function handleSignUp() {
-  const email = authEmail?.value.trim();
+  const email = authEmail?.value.trim().toLowerCase();
   const password = authPassword?.value;
   const first = firstName?.value.trim();
   const last = lastName?.value.trim();
@@ -44,6 +55,12 @@ async function handleSignUp() {
 
   if (!email || !password) {
     setStatus("Email and password required.");
+    return;
+  }
+
+  const allowed = await isEmailAllowedForSignup(email);
+  if (!allowed) {
+    setStatus("This email is not allowed to create an account.");
     return;
   }
 
