@@ -562,7 +562,7 @@ function createTourTypeSelect(value) {
 }
 
 function getPlatformsForType(type) {
-  if (!type || type.payment_type === "free") return [];
+  if (!type) return [];
   return Array.isArray(type.platforms) ? type.platforms : [];
 }
 
@@ -613,7 +613,7 @@ function renderTourModal(tour) {
   const typeForTour = tourTypes.find((t) => t.guide_id === tour.guide_id && t.name === tour.type) || null;
   const platformForTour = tour.platform || getPlatformsForType(typeForTour)[0] || null;
   const isFreeTour = typeForTour?.payment_type === "free" || /free/i.test(String(tour.type || ""));
-  const feePerParticipant = Number(typeForTour?.fee_per_participant || 0);
+  const feePerParticipant = Number(platformForTour?.commission_percent || typeForTour?.fee_per_participant || 0);
   const unresolvedParticipants = (tour.participants || []).filter(
     (p) => p.attendance_status !== "arrived" && p.attendance_status !== "absent"
   );
@@ -926,11 +926,13 @@ function renderTourModal(tour) {
         const liveType = typeForTour || await loadTourTypeForTour(tour);
         const nameSuggestsFree = /free/i.test(String(tour.type || ""));
         const liveIsFreeTour = liveType?.payment_type === "free" || nameSuggestsFree;
-        const liveFeePerParticipant = Number(liveType?.fee_per_participant || feePerParticipant || 0);
+        const livePlatform = tour.platform || getPlatformsForType(liveType)[0] || null;
+        const liveFeePerParticipant = Number(livePlatform?.commission_percent || liveType?.fee_per_participant || feePerParticipant || 0);
 
         if (liveIsFreeTour) {
           const typeFromDb = await loadTourTypeForTour(tour);
-          const effectiveFee = Number(typeFromDb?.fee_per_participant ?? liveFeePerParticipant ?? 0);
+          const dbPlatform = tour.platform || getPlatformsForType(typeFromDb)[0] || null;
+          const effectiveFee = Number(dbPlatform?.commission_percent ?? typeFromDb?.fee_per_participant ?? liveFeePerParticipant ?? 0);
           if (!Number.isFinite(effectiveFee) || effectiveFee <= 0) {
             alert("Fee per participant is missing for this free tour.");
             return;
@@ -1312,12 +1314,12 @@ async function showDetails(iso) {
     clearChildren(platformSelect);
     const selectedType = tourTypes.find((type) => type.id === typeSelect.value);
     const platforms = getPlatformsForType(selectedType);
-    const needsPlatform = selectedType && selectedType.payment_type !== "free";
+    const needsPlatform = Boolean(selectedType);
 
     if (!needsPlatform) {
       const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "No platform";
+        option.value = "";
+        option.textContent = "No platform";
       option.selected = true;
       platformSelect.appendChild(option);
       platformSelect.disabled = true;
@@ -1374,7 +1376,7 @@ async function showDetails(iso) {
     }
     const selectedPlatform = getPlatformsForType(selectedType)
       .find((platform) => (platform.id || platform.name) === platformSelect.value) || null;
-    if (selectedType.payment_type !== "free" && !selectedPlatform) {
+    if (!selectedPlatform) {
       alert("Please select a platform.");
       return;
     }

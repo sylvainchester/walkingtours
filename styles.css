@@ -629,6 +629,11 @@ h1 {
   color: var(--muted);
 }
 
+.strong-title {
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .details-content {
   margin-top: 6px;
   font-size: 16px;

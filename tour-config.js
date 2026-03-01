@@ -21,6 +21,7 @@ const typeModalClose = document.getElementById("typeModalClose");
 const ticketPriceField = document.getElementById("ticketPriceField");
 const feePerParticipantField = document.getElementById("feePerParticipantField");
 const platformSection = document.getElementById("platformSection");
+const platformRateLabel = document.getElementById("platformRateLabel");
 const platformName = document.getElementById("platformName");
 const platformCommission = document.getElementById("platformCommission");
 const platformRequiresInvoice = document.getElementById("platformRequiresInvoice");
@@ -36,7 +37,7 @@ let draftPlatforms = [];
 
 function bindFocusScroll() {
   const fields = document.querySelectorAll(
-    "#typeName, #ticketPrice, #feePerParticipant, #platformName, #platformCommission, #platformEmail, #paymentType"
+    "#typeName, #ticketPrice, #platformName, #platformCommission, #platformEmail, #paymentType"
   );
   fields.forEach((field) => {
     field.addEventListener("focus", () => {
@@ -142,8 +143,12 @@ function renderDraftPlatforms() {
 function applyNewTypeVisibility() {
   const isFree = paymentType.value === "free";
   ticketPriceField.style.display = isFree ? "none" : "";
-  feePerParticipantField.style.display = isFree ? "" : "none";
-  platformSection.style.display = isFree ? "none" : "";
+  feePerParticipantField.style.display = "none";
+  platformSection.style.display = "";
+  if (platformRateLabel) {
+    platformRateLabel.textContent = isFree ? "Fee per participant" : "Commission %";
+  }
+  platformCommission.placeholder = isFree ? "Fee per participant" : "Commission %";
 }
 
 async function refreshShareInviteIndicators() {
@@ -255,8 +260,16 @@ function buildModalPlatformSection(platforms, isOwner) {
   emailInput.type = "text";
   emailInput.placeholder = "Email (optional)";
 
+  const rateField = document.createElement("label");
+  rateField.className = "field";
+  const rateLabel = document.createElement("span");
+  rateLabel.className = "platform-rate-label";
+  rateLabel.textContent = "Commission %";
+  rateField.appendChild(rateLabel);
+  rateField.appendChild(commissionInput);
+
   form.appendChild(makeField("Platform name", nameInput));
-  form.appendChild(makeField("Commission %", commissionInput));
+  form.appendChild(rateField);
   form.appendChild(makeField("Invoice required", invoiceInput));
   form.appendChild(makeField("Email", emailInput));
   wrapper.appendChild(form);
@@ -343,29 +356,29 @@ function renderTypeModal(type) {
   priceInput.step = "0.01";
   priceInput.value = type.ticket_price ?? "";
 
-  const feeInput = document.createElement("input");
-  feeInput.className = "input";
-  feeInput.type = "number";
-  feeInput.step = "0.01";
-  feeInput.value = type.fee_per_participant ?? "";
-
-  [paymentSelect, shareableInput, nameInput, priceInput, feeInput].forEach((el) => {
+  [paymentSelect, shareableInput, nameInput, priceInput].forEach((el) => {
     el.disabled = !isOwner;
   });
 
   const priceWrap = makeField("Ticket price", priceInput);
-  const feeWrap = makeField("Fee per participant", feeInput);
   const platformTitle = document.createElement("div");
   platformTitle.className = "details-title";
   platformTitle.textContent = "Platforms";
   const { wrapper: platformWrapper } = buildModalPlatformSection(platforms, isOwner);
+  const modalRateLabel = platformWrapper.querySelector(".platform-rate-label");
+  const modalRateInput = platformWrapper.querySelector('input[type="number"]');
 
   const applyVisibility = () => {
     const isFree = paymentSelect.value === "free";
     priceWrap.style.display = isFree ? "none" : "";
-    feeWrap.style.display = isFree ? "" : "none";
-    platformTitle.style.display = isFree ? "none" : "";
-    platformWrapper.style.display = isFree ? "none" : "";
+    platformTitle.style.display = "";
+    platformWrapper.style.display = "";
+    if (modalRateLabel) {
+      modalRateLabel.textContent = isFree ? "Fee per participant" : "Commission %";
+    }
+    if (modalRateInput) {
+      modalRateInput.placeholder = isFree ? "Fee per participant" : "Commission %";
+    }
   };
   paymentSelect.addEventListener("change", applyVisibility);
 
@@ -373,7 +386,6 @@ function renderTypeModal(type) {
   form.appendChild(makeField("Shareable", shareableInput));
   form.appendChild(makeField("Tour name", nameInput));
   form.appendChild(priceWrap);
-  form.appendChild(feeWrap);
   form.appendChild(platformTitle);
   form.appendChild(platformWrapper);
   applyVisibility();
@@ -395,8 +407,8 @@ function renderTypeModal(type) {
       return;
     }
     if (isFree) {
-      if (feeInput.value === "") {
-        setStatus("Fee per participant is required for free tours.");
+      if (!platforms.length) {
+        setStatus("Add at least one platform for a free tour.");
         return;
       }
     } else {
@@ -434,8 +446,8 @@ function renderTypeModal(type) {
       name,
       description: type.description || null,
       ticket_price: isFree ? null : Number(priceInput.value),
-      fee_per_participant: isFree ? Number(feeInput.value) : null,
-      platforms: isFree ? [] : platforms,
+      fee_per_participant: null,
+      platforms,
       commission_percent: null,
       invoice_org_name: null,
       invoice_org_address: null,
@@ -537,20 +549,13 @@ async function addNewType() {
     setStatus("Tour name is required.");
     return;
   }
-  if (isFree) {
-    if (feePerParticipant.value === "") {
-      setStatus("Fee per participant is required for free tours.");
-      return;
-    }
-  } else {
-    if (ticketPrice.value === "") {
-      setStatus("Ticket price is required for pre-paid tours.");
-      return;
-    }
-    if (!draftPlatforms.length) {
-      setStatus("Add at least one platform for a pre-paid tour.");
-      return;
-    }
+  if (!isFree && ticketPrice.value === "") {
+    setStatus("Ticket price is required for pre-paid tours.");
+    return;
+  }
+  if (!draftPlatforms.length) {
+    setStatus(`Add at least one platform for a ${isFree ? "free" : "pre-paid"} tour.`);
+    return;
   }
 
   const { data: existing, error: existingError } = await supabase
@@ -575,8 +580,8 @@ async function addNewType() {
     name,
     description: null,
     ticket_price: isFree ? null : Number(ticketPrice.value),
-    fee_per_participant: isFree ? Number(feePerParticipant.value) : null,
-    platforms: isFree ? [] : draftPlatforms,
+    fee_per_participant: null,
+    platforms: draftPlatforms,
     commission_percent: null,
     invoice_org_name: null,
     invoice_org_address: null,
