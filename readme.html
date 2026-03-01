@@ -29,6 +29,7 @@
             <a class="menu-item" href="availability.html">My Availability</a>
             <a class="menu-item" href="profile.html">My Profile</a>
             <a class="menu-item" href="tour-config.html">Tour Configuration</a>
+            <a class="menu-item" href="manage-invoices.html">Manage Invoices</a>
             <a class="menu-item" href="readme.html">README</a>
             <button class="menu-item" id="signOutBtn" type="button">Sign out</button>
           </div>
@@ -47,8 +48,8 @@
         <div class="details-title">Tour Configuration</div>
         <div class="details-content">
           <div class="readme-line"><strong>Tour templates:</strong> all bookable tours are created in <em>Tour Configuration</em>.</div>
-          <div class="readme-line"><strong>Pre-paid:</strong> use this when the tour is invoiced. You define ticket price, commission, invoice organization name and invoice email.</div>
-          <div class="readme-line"><strong>Free tour:</strong> use this when guests pay the guide directly. In this case there is no invoice PDF. Instead you define the <em>fee per participant</em> owed to the platform.</div>
+          <div class="readme-line"><strong>Pre-paid:</strong> use this when the tour is invoiced. You define ticket price and one or more platforms, each with its own commission, invoice requirement and email.</div>
+          <div class="readme-line"><strong>Free tour:</strong> use this when guests pay the guide directly. In this case no invoice is generated from the tour lock. Platforms still exist, but their value is used as the fee per participant owed to the platform.</div>
           <div class="readme-line"><strong>Shareable / Private:</strong> shareable tour types can be used by guides sharing the same calendar. Private types still block conflicts but their details stay hidden from the other guide.</div>
         </div>
       </section>
@@ -82,7 +83,7 @@
           <div class="readme-line"><strong>Attendance status:</strong> each participant must be marked as <em>arrived</em> or <em>no-show</em>.</div>
           <div class="readme-line"><strong>Lock participants:</strong> locking is final. After lock, participants can no longer be changed.</div>
           <div class="readme-line"><strong>Validation before lock:</strong> all participants must have a status, and at least one participant must be marked as arrived.</div>
-          <div class="readme-line"><strong>Pre-paid tours:</strong> after lock, the invoice PDF is generated automatically and only arrived participants are counted.</div>
+          <div class="readme-line"><strong>Pre-paid tours:</strong> locking only freezes the participant list. Invoices are then created later from <em>Manage Invoices</em> by choosing a platform and a period.</div>
           <div class="readme-line"><strong>Free tours:</strong> after lock, the guide can enter the amount received and the app shows the amount due to the platform based on the fee per participant.</div>
         </div>
       </section>

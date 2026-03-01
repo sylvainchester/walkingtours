@@ -1089,49 +1089,17 @@ async function renderTourModal(tour) {
           }
           updatePayload.free_amount_received = null;
           updatePayload.platform_due_amount = Number((arrivedPersonsCount * effectiveFee).toFixed(2));
-          updatePayload.invoice_path = null;
         } else {
           const effectivePlatform = tour.platform || getPlatformsForType(liveType)[0] || null;
           if (!effectivePlatform) {
             alert("No platform is configured for this pre-paid tour.");
             return;
           }
-          if (effectivePlatform.requires_invoice === false) {
-            updatePayload.invoice_path = null;
-          } else {
-            const isLocalHost = window.location.hostname === "localhost" || window.location.hostname === "0.0.0.0";
-            const invoiceApiUrl = isLocalHost
-              ? "https://walkingtours.vercel.app/api/generate-invoice"
-              : "/api/generate-invoice";
-            const { data: authData } = await supabase.auth.getSession();
-            const accessToken = authData?.session?.access_token;
-            if (!accessToken) {
-              alert("Auth session missing.");
-              return;
-            }
-            const response = await fetch(invoiceApiUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({ tour_id: tour.id }),
-            });
-            const contentType = response.headers.get("content-type") || "";
-            const result = contentType.includes("application/json")
-              ? await response.json()
-              : { ok: false, error: await response.text() };
-            if (!response.ok || !result?.ok || !result?.filePath) {
-              alert(`Invoice generation error: ${result?.error || "Unknown error"}`);
-              return;
-            }
-            updatePayload.invoice_path = result.filePath;
-          }
           updatePayload.free_amount_received = null;
           updatePayload.platform_due_amount = null;
         }
-      } catch (invoiceError) {
-        alert(`Invoice generation error: ${invoiceError?.message || invoiceError}`);
+      } catch (lockError) {
+        alert(`Lock error: ${lockError?.message || lockError}`);
         return;
       }
       const { error } = await supabase
@@ -1212,69 +1180,6 @@ async function renderTourModal(tour) {
       dueText.className = "platform-due-note";
       dueText.textContent = `Platform due: ${money(platformDue)} (${arrivedPersonsCount} participant${arrivedPersonsCount === 1 ? "" : "s"} x ${money(displayUnitFee)})`;
       modalBody.appendChild(dueText);
-    }
-    if (tour.invoice_path) {
-      const invoiceRow = document.createElement("div");
-      invoiceRow.className = "form-row";
-      const invoiceLink = document.createElement("a");
-      invoiceLink.href = "#";
-      invoiceLink.className = "ghost";
-      invoiceLink.textContent = "Open invoice PDF";
-      invoiceLink.addEventListener("click", async (event) => {
-        event.preventDefault();
-        const { data, error } = await supabase.storage
-          .from("invoices")
-          .createSignedUrl(tour.invoice_path, 60 * 30);
-        if (error || !data?.signedUrl) {
-          alert(`Invoice link error: ${error?.message || "Unknown error"}`);
-          return;
-        }
-        window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-      });
-      invoiceRow.appendChild(invoiceLink);
-      modalBody.appendChild(invoiceRow);
-
-      const sendRow = document.createElement("div");
-      sendRow.className = "form-row";
-      const sendBtn = document.createElement("button");
-      sendBtn.type = "button";
-      sendBtn.className = "ghost";
-      sendBtn.textContent = "Send invoice email";
-      sendBtn.addEventListener("click", async () => {
-        const guideInfo = await loadGuideProfileById(tour.guide_id);
-        const toEmail = extractEmail(platformForTour?.email);
-        if (!toEmail) {
-          alert("Invoice email is missing for this platform.");
-          return;
-        }
-        const { data, error } = await supabase.storage
-          .from("invoices")
-          .createSignedUrl(tour.invoice_path, 60 * 30);
-        if (error || !data?.signedUrl) {
-          alert(`Invoice link error: ${error?.message || "Unknown error"}`);
-          return;
-        }
-        const guideName = guideInfo
-          ? `${guideInfo.first_name || ""} ${guideInfo.last_name || ""}`.trim()
-          : "Unknown guide";
-        const guideEmail = extractEmail(guideInfo?.email);
-        const start = (tour.start_time || "").slice(0, 5);
-        const end = (tour.end_time || "").slice(0, 5);
-        const whenText = end ? `${tour.date} ${start}-${end}` : `${tour.date} ${start}`;
-        const subject = `Invoice - ${tour.type} - ${tour.date}`;
-        const bodyText =
-          `Hello,\n\n` +
-          `Please find the invoice related to the tour "${tour.type}" completed on ${whenText} by guide "${guideName}".\n\n` +
-          `Invoice PDF link:\n${data.signedUrl}\n\n` +
-          `Best regards`;
-        const mailtoUrl =
-          `mailto:${encodeURIComponent(toEmail)}` +
-          `?subject=${encodeURIComponent(subject)}` +
-          `&body=${encodeURIComponent(bodyText)}`;
-        window.location.href = mailtoUrl;
-      });
-      sendRow.appendChild(sendBtn);
-      modalBody.appendChild(sendRow);
     }
   } else if (tour.status !== "accepted") {
     const pendingNote = document.createElement("div");
