@@ -8,6 +8,7 @@
   --cell-border: rgba(0, 0, 0, 0.16);
   --focus: #1a1a1a;
   --card: #fffdf2;
+  color-scheme: only light;
 }
 
 * {
@@ -595,6 +596,10 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.readme-line {
+  line-height: 1.45;
 }
 
 .tour-row {

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f1d4" />
+    <title>README - Walking Tours</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>README</h1>
+        </div>
+        <div class="avatar-menu" id="avatarMenu">
+          <button id="avatarButton" class="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+            <span class="menu-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+          <div class="menu" id="avatarDropdown">
+            <a class="menu-item" href="index.html">Walking tours</a>
+            <a class="menu-item" href="share.html">Share My Calendar</a>
+            <a class="menu-item" href="availability.html">My Availability</a>
+            <a class="menu-item" href="profile.html">My Profile</a>
+            <a class="menu-item" href="tour-config.html">Tour Configuration</a>
+            <a class="menu-item" href="readme.html">README</a>
+            <button class="menu-item" id="signOutBtn" type="button">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Overview</div>
+        <div class="details-content">
+          <div>This screen explains the workflow for each role in the app.</div>
+          <div>The same calendar can be shared by multiple guides, but each role uses it differently.</div>
+        </div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Admin</div>
+        <div class="details-content">
+          <div class="readme-line"><strong>Tour Configuration:</strong> create and maintain the tour templates that guides can book.</div>
+          <div class="readme-line"><strong>Pre-paid tours:</strong> define ticket price, commission, invoice organization and invoice email.</div>
+          <div class="readme-line"><strong>Free tours:</strong> define the fee per participant that the guide owes to the platform after the tour.</div>
+          <div class="readme-line"><strong>Shareable / Private:</strong> shareable tour types are visible to guides sharing the calendar. Private ones remain hidden in details but still block conflicting bookings.</div>
+          <div class="readme-line"><strong>Invoice flow:</strong> when participants are locked on a pre-paid tour, the invoice PDF is generated and stored automatically.</div>
+        </div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Coordinator</div>
+        <div class="details-content">
+          <div class="readme-line"><strong>Share My Calendar:</strong> invite another guide to work on the same calendar. Invitations must be accepted before the calendar is shared.</div>
+          <div class="readme-line"><strong>Availability:</strong> each guide marks their available days. Only available guides appear when creating a new tour.</div>
+          <div class="readme-line"><strong>Booking a tour:</strong> select a day, start time, guide and tour type. If the assigned guide is not yourself, the booking is created as <em>pending</em>.</div>
+          <div class="readme-line"><strong>Confirmation:</strong> the assigned guide must accept the pending tour. Accepted tours appear in green; pending tours appear in orange.</div>
+          <div class="readme-line"><strong>Conflicts:</strong> the app blocks overlapping tours for the same guide, including private tours not visible in detail.</div>
+          <div class="readme-line"><strong>Notifications:</strong> guides receive push notifications for share invites, accepted shares, pending tours and some tour updates.</div>
+        </div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Guest</div>
+        <div class="details-content">
+          <div class="readme-line"><strong>Participants:</strong> after a tour is accepted, guides can add or import participant names and group sizes.</div>
+          <div class="readme-line"><strong>Attendance:</strong> each participant should be marked as arrived or no-show before locking the final list.</div>
+          <div class="readme-line"><strong>Lock participants:</strong> once locked, the attendance list becomes final and cannot be edited again.</div>
+          <div class="readme-line"><strong>Pre-paid tours:</strong> only arrived participants are counted on the invoice.</div>
+          <div class="readme-line"><strong>Free tours:</strong> after lock, the guide enters the amount received and the app shows what is due to the platform from the per-participant fee.</div>
+          <div class="readme-line"><strong>Invoice email:</strong> for pre-paid tours, the guide can open the PDF and prepare an email to the invoicing organization.</div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="readme.js"></script>
+    <script src="sw-register.js"></script>
+  </body>
+</html>
