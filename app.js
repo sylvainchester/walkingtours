@@ -114,6 +114,20 @@ function getTodayISO() {
   return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
 }
 
+function formatShortDateNoYear(iso) {
+  const date = parseISO(iso);
+  const day = date.getDate();
+  const month = date.toLocaleDateString("en-US", { month: "short" });
+  const mod100 = day % 100;
+  let suffix = "th";
+  if (mod100 < 11 || mod100 > 13) {
+    if (day % 10 === 1) suffix = "st";
+    else if (day % 10 === 2) suffix = "nd";
+    else if (day % 10 === 3) suffix = "rd";
+  }
+  return `${day}${suffix} ${month}`;
+}
+
 function addMinutesToTime(value, minutesToAdd) {
   if (!value) return "";
   const [h, m] = value.split(":").map(Number);
@@ -614,7 +628,7 @@ async function renderTourModal(tour) {
 
   const headerRow = document.createElement("div");
   headerRow.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}`;
-  headerRow.textContent = `${(tour.start_time || "").slice(0, 5)} - ${(tour.end_time || "").slice(0, 5)} · ${guideName} · ${isPrivate ? "Private tour" : tour.type}`;
+  headerRow.textContent = `${formatShortDateNoYear(tour.date)} · ${(tour.start_time || "").slice(0, 5)} - ${(tour.end_time || "").slice(0, 5)} · ${guideName} · ${isPrivate ? "Private tour" : tour.type}`;
   modalBody.appendChild(headerRow);
 
   const isOwner = session && tour.guide_id === session.user.id;
