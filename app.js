@@ -581,15 +581,15 @@ function closeTourModal() {
   modalOpenTourId = null;
 }
 
-function openTourModal(tour) {
+async function openTourModal(tour) {
   if (!tourModal || !modalBody) return;
   modalOpenTourId = tour.id;
   tourModal.classList.add("open");
   tourModal.setAttribute("aria-hidden", "false");
-  renderTourModal(tour);
+  await renderTourModal(tour);
 }
 
-function renderTourModal(tour) {
+async function renderTourModal(tour) {
   clearChildren(modalBody);
 
   const profile = sharedGuideProfiles.get(tour.guide_id);
@@ -610,7 +610,10 @@ function renderTourModal(tour) {
   const isLocked = Boolean(tour.participants_locked);
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast && !isLocked && !isPrivate;
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
-  const typeForTour = tourTypes.find((t) => t.guide_id === tour.guide_id && t.name === tour.type) || null;
+  const canEditTourGuide = Boolean(session) && !isPast && !isLocked && !isPrivate && (isOwner || isCreator);
+  const typeForTour = tourTypes.find((t) => t.guide_id === tour.guide_id && t.name === tour.type)
+    || await loadTourTypeForTour(tour)
+    || null;
   const platformForTour = tour.platform || getPlatformsForType(typeForTour)[0] || null;
   const participantPlatforms = getPlatformsForType(typeForTour);
   const isFreeTour = typeForTour?.payment_type === "free" || /free/i.test(String(tour.type || ""));
@@ -633,6 +636,100 @@ function renderTourModal(tour) {
     && unresolvedParticipants.length === 0
     && arrivedParticipants.length > 0
     && (isOwner || isCreator);
+
+  if (canEditTourGuide) {
+    const guideRow = document.createElement("div");
+    guideRow.className = "form-row";
+
+    const guideLabel = document.createElement("div");
+    guideLabel.className = "muted participant-platform-label";
+    guideLabel.textContent = "Guide";
+    guideRow.appendChild(guideLabel);
+
+    const guideSelect = document.createElement("select");
+    guideSelect.className = "select";
+    Array.from(sharedGuideIds).forEach((guideId) => {
+      const option = document.createElement("option");
+      const guideProfile = sharedGuideProfiles.get(guideId);
+      option.value = guideId;
+      option.textContent = guideProfile
+        ? `${guideProfile.first_name} ${guideProfile.last_name}`
+        : guideId;
+      if (guideId === tour.guide_id) option.selected = true;
+      guideSelect.appendChild(option);
+    });
+    guideRow.appendChild(guideSelect);
+
+    const saveGuideBtn = document.createElement("button");
+    saveGuideBtn.type = "button";
+    saveGuideBtn.className = "ghost";
+    saveGuideBtn.textContent = "Save guide";
+    saveGuideBtn.addEventListener("click", async () => {
+      const nextGuideId = guideSelect.value;
+      if (!nextGuideId || nextGuideId === tour.guide_id) return;
+
+      const validationRequired = nextGuideId === session.user.id
+        ? false
+        : (shareValidationByGuideId.get(nextGuideId) ?? true);
+      const nextStatus = nextGuideId === session.user.id || !validationRequired ? "accepted" : "pending";
+
+      const { data: conflicts, error: conflictError } = await supabase
+        .from("tours")
+        .select("id")
+        .eq("guide_id", nextGuideId)
+        .eq("date", tour.date)
+        .neq("id", tour.id)
+        .lte("start_time", tour.end_time)
+        .gte("end_time", tour.start_time);
+      if (conflictError) {
+        alert(`Conflict check error: ${conflictError.message}`);
+        return;
+      }
+      if (conflicts && conflicts.length > 0) {
+        alert("This guide already has another tour at the same time.");
+        return;
+      }
+
+      const previousGuideId = tour.guide_id;
+      const previousGuideName = guideName;
+      const nextGuideProfile = sharedGuideProfiles.get(nextGuideId);
+      const nextGuideName = nextGuideProfile
+        ? `${nextGuideProfile.first_name} ${nextGuideProfile.last_name}`
+        : "Unknown";
+
+      const { error } = await supabase
+        .from("tours")
+        .update({ guide_id: nextGuideId, status: nextStatus })
+        .eq("id", tour.id);
+      if (error) {
+        alert(`Guide update error: ${error.message}`);
+        return;
+      }
+
+      if (previousGuideId !== session.user.id) {
+        await sendPush(supabase, {
+          to_user_id: previousGuideId,
+          title: "Tour reassigned",
+          body: `A tour on ${tour.date} is no longer assigned to you.`,
+          data: { url: "./index.html" },
+        });
+      }
+      if (nextGuideId !== session.user.id) {
+        await sendPush(supabase, {
+          to_user_id: nextGuideId,
+          title: nextStatus === "pending" ? "Tour reassignment pending" : "Tour reassigned",
+          body: nextStatus === "pending"
+            ? `${previousGuideName} reassigned a tour to you on ${tour.date}.`
+            : `${previousGuideName} reassigned a tour to ${nextGuideName === previousGuideName ? "you" : nextGuideName} on ${tour.date}.`,
+          data: { url: "./index.html" },
+        });
+      }
+
+      await loadMonthTours();
+    });
+    guideRow.appendChild(saveGuideBtn);
+    modalBody.appendChild(guideRow);
+  }
 
   const handleDeleteTour = async () => {
     if (!confirm("Delete this tour?")) return;
@@ -817,6 +914,11 @@ function renderTourModal(tour) {
       participantPlatformSelect.appendChild(option);
       participantPlatformSelect.disabled = true;
     } else {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Select platform";
+      placeholder.selected = !platformForTour;
+      participantPlatformSelect.appendChild(placeholder);
       participantPlatforms.forEach((platform) => {
         const option = document.createElement("option");
         option.value = platform.name || "";
@@ -861,6 +963,10 @@ function renderTourModal(tour) {
         } else {
           importStatus.textContent = `Found ${participants.length} participants.`;
           const platformName = participantPlatformSelect.value || null;
+          if (!platformName) {
+            importStatus.textContent = "Select a platform first.";
+            return;
+          }
           if (confirm(`Import ${participants.length} participants?`)) {
             const { error } = await supabase.from("participants").insert(
               participants.map((p) => ({
@@ -911,12 +1017,17 @@ function renderTourModal(tour) {
     addBtn.addEventListener("click", async () => {
       const name = nameInput.value.trim();
       const groupSize = Number(groupInput.value || 1);
+      const selectedPlatformName = participantPlatformSelect.value || null;
       if (!name) return;
+      if (!selectedPlatformName) {
+        alert("Select a platform first.");
+        return;
+      }
       const { error } = await supabase.from("participants").insert({
         tour_id: tour.id,
         name,
         group_size: groupSize,
-        platform_name: participantPlatformSelect.value || null,
+        platform_name: selectedPlatformName,
       });
       if (!error) {
         nameInput.value = "";
