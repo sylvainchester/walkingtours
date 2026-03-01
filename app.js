@@ -886,8 +886,23 @@ async function renderTourModal(tour) {
           if (!error) await loadMonthTours();
         });
 
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "ghost danger";
+        removeBtn.textContent = "−";
+        removeBtn.title = "Delete participant";
+        removeBtn.addEventListener("click", async () => {
+          if (!confirm("Delete this participant?")) return;
+          const { error } = await supabase
+            .from("participants")
+            .delete()
+            .eq("id", p.id);
+          if (!error) await loadMonthTours();
+        });
+
         actions.appendChild(arrivedBtn);
         actions.appendChild(absentBtn);
+        actions.appendChild(removeBtn);
         row.appendChild(actions);
       }
 

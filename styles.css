@@ -699,9 +699,11 @@ h1 {
   border: 1px solid var(--cell-border);
   border-radius: 16px;
   max-width: 720px;
+  max-height: 84vh;
   margin: 8vh auto;
   padding: 16px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  overflow-y: auto;
 }
 
 .modal-header {
