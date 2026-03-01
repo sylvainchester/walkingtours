@@ -30,6 +30,13 @@ export async function ensurePushSubscription(supabase, session) {
   const json = sub.toJSON();
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
 
+  // Keep only the latest device subscription for this account.
+  await supabase
+    .from("push_subscriptions")
+    .delete()
+    .eq("user_id", session.user.id)
+    .neq("endpoint", json.endpoint);
+
   await supabase.from("push_subscriptions").upsert(
     {
       user_id: session.user.id,

@@ -33,6 +33,10 @@ body.readme-page {
   overflow-y: auto;
 }
 
+body.tour-config-page {
+  overflow-y: auto;
+}
+
 .app {
   width: 100%;
   max-width: 980px;
@@ -47,6 +51,11 @@ body.readme-page {
 }
 
 .readme-page .app {
+  height: auto;
+  min-height: calc(var(--vh, 1vh) * 100);
+}
+
+.tour-config-page .app {
   height: auto;
   min-height: calc(var(--vh, 1vh) * 100);
 }
@@ -588,6 +597,15 @@ h1 {
   min-height: 72px;
 }
 
+.tour-config-form {
+  position: relative;
+  z-index: 1;
+}
+
+.tour-config-list {
+  margin-bottom: 20px;
+}
+
 .day-panel {
   min-height: 0;
   overflow: hidden;
@@ -787,6 +805,16 @@ h1 {
   h1 { font-size: 28px; }
   .day { font-size: 16px; }
   .badge { font-size: 10px; }
+  .tour-config-page .app {
+    padding-bottom: 120px;
+  }
+  .tour-config-page .form-col,
+  .tour-config-page .compact-two-col {
+    grid-template-columns: 1fr;
+  }
+  .tour-config-page .platform-description-field {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 520px) {

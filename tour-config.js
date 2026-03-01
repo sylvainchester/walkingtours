@@ -6,7 +6,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const typeName = document.getElementById("typeName");
 const ticketPrice = document.getElementById("ticketPrice");
-const typeDescription = document.getElementById("typeDescription");
 const paymentType = document.getElementById("paymentType");
 const typeShareable = document.getElementById("typeShareable");
 const feePerParticipant = document.getElementById("feePerParticipant");
@@ -26,7 +25,6 @@ const platformName = document.getElementById("platformName");
 const platformCommission = document.getElementById("platformCommission");
 const platformRequiresInvoice = document.getElementById("platformRequiresInvoice");
 const platformEmail = document.getElementById("platformEmail");
-const platformDescription = document.getElementById("platformDescription");
 const addPlatform = document.getElementById("addPlatform");
 const platformsDraftList = document.getElementById("platformsDraftList");
 
@@ -35,6 +33,19 @@ let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
 let activeType = null;
 let draftPlatforms = [];
+
+function bindFocusScroll() {
+  const fields = document.querySelectorAll(
+    "#typeName, #ticketPrice, #feePerParticipant, #platformName, #platformCommission, #platformEmail, #paymentType"
+  );
+  fields.forEach((field) => {
+    field.addEventListener("focus", () => {
+      window.setTimeout(() => {
+        field.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 220);
+    });
+  });
+}
 
 function setStatus(message) {
   if (typeStatus) typeStatus.textContent = message || "";
@@ -96,7 +107,6 @@ function clearPlatformDraftInputs() {
   platformCommission.value = "";
   platformRequiresInvoice.checked = true;
   platformEmail.value = "";
-  platformDescription.value = "";
 }
 
 function addDraftPlatform() {
@@ -115,7 +125,7 @@ function addDraftPlatform() {
     commission_percent: commissionValue,
     requires_invoice: platformRequiresInvoice.checked,
     email: platformEmail.value,
-    description: platformDescription.value,
+    description: null,
   }));
   clearPlatformDraftInputs();
   renderDraftPlatforms();
@@ -245,19 +255,10 @@ function buildModalPlatformSection(platforms, isOwner) {
   emailInput.type = "text";
   emailInput.placeholder = "Email (optional)";
 
-  const descriptionInput = document.createElement("input");
-  descriptionInput.className = "input";
-  descriptionInput.type = "text";
-  descriptionInput.placeholder = "Description (optional)";
-
-  const descriptionField = makeField("Description", descriptionInput);
-  descriptionField.classList.add("platform-description-field");
-
   form.appendChild(makeField("Platform name", nameInput));
   form.appendChild(makeField("Commission %", commissionInput));
   form.appendChild(makeField("Invoice required", invoiceInput));
   form.appendChild(makeField("Email", emailInput));
-  form.appendChild(descriptionField);
   wrapper.appendChild(form);
 
   const actions = document.createElement("div");
@@ -282,13 +283,12 @@ function buildModalPlatformSection(platforms, isOwner) {
       commission_percent: commissionValue,
       requires_invoice: invoiceInput.checked,
       email: emailInput.value,
-      description: descriptionInput.value,
+      description: null,
     }));
     nameInput.value = "";
     commissionInput.value = "";
     invoiceInput.checked = true;
     emailInput.value = "";
-    descriptionInput.value = "";
     refresh();
   });
   actions.appendChild(addBtn);
@@ -349,11 +349,7 @@ function renderTypeModal(type) {
   feeInput.step = "0.01";
   feeInput.value = type.fee_per_participant ?? "";
 
-  const descInput = document.createElement("input");
-  descInput.className = "input";
-  descInput.value = type.description || "";
-
-  [paymentSelect, shareableInput, nameInput, priceInput, feeInput, descInput].forEach((el) => {
+  [paymentSelect, shareableInput, nameInput, priceInput, feeInput].forEach((el) => {
     el.disabled = !isOwner;
   });
 
@@ -378,7 +374,6 @@ function renderTypeModal(type) {
   form.appendChild(makeField("Tour name", nameInput));
   form.appendChild(priceWrap);
   form.appendChild(feeWrap);
-  form.appendChild(makeField("Description", descInput));
   form.appendChild(platformTitle);
   form.appendChild(platformWrapper);
   applyVisibility();
@@ -437,7 +432,7 @@ function renderTypeModal(type) {
       payment_type: paymentSelect.value,
       shareable: shareableInput.checked,
       name,
-      description: descInput.value.trim() || null,
+      description: type.description || null,
       ticket_price: isFree ? null : Number(priceInput.value),
       fee_per_participant: isFree ? Number(feeInput.value) : null,
       platforms: isFree ? [] : platforms,
@@ -578,7 +573,7 @@ async function addNewType() {
     payment_type: paymentType.value,
     shareable: typeShareable ? typeShareable.checked : true,
     name,
-    description: typeDescription.value.trim() || null,
+    description: null,
     ticket_price: isFree ? null : Number(ticketPrice.value),
     fee_per_participant: isFree ? Number(feePerParticipant.value) : null,
     platforms: isFree ? [] : draftPlatforms,
@@ -597,7 +592,6 @@ async function addNewType() {
   typeName.value = "";
   ticketPrice.value = "";
   feePerParticipant.value = "";
-  typeDescription.value = "";
   draftPlatforms = [];
   clearPlatformDraftInputs();
   renderDraftPlatforms();
@@ -617,6 +611,7 @@ async function init() {
   await loadSharedGuides();
   renderDraftPlatforms();
   applyNewTypeVisibility();
+  bindFocusScroll();
   await loadTypes();
 }
 
