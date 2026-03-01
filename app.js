@@ -414,6 +414,29 @@ function buildGuideFilter() {
   });
 }
 
+function getSortedGuideIds() {
+  return Array.from(sharedGuideIds).sort((a, b) => {
+    const profileA = sharedGuideProfiles.get(a);
+    const profileB = sharedGuideProfiles.get(b);
+    const nameA = profileA ? `${profileA.first_name || ""} ${profileA.last_name || ""}`.trim() : a;
+    const nameB = profileB ? `${profileB.first_name || ""} ${profileB.last_name || ""}`.trim() : b;
+    return nameA.localeCompare(nameB, "en", { sensitivity: "base" });
+  });
+}
+
+function getGuideColorClass(guideId) {
+  const orderedGuideIds = getSortedGuideIds();
+  return orderedGuideIds.indexOf(guideId) === 1 ? "guide-color-2" : "guide-color-1";
+}
+
+function getAcceptedToursColorClass(tours) {
+  const acceptedTours = (tours || []).filter((tour) => tour.status === "accepted");
+  if (!acceptedTours.length) return "guide-color-1";
+  const uniqueGuideIds = new Set(acceptedTours.map((tour) => tour.guide_id));
+  if (uniqueGuideIds.size > 1) return "guide-color-1";
+  return getGuideColorClass(acceptedTours[0].guide_id);
+}
+
 async function loadAvailabilityForSelectedGuide() {
   unavailableDates = new Set();
   if (!session || !selectedGuideId) return;
@@ -525,7 +548,7 @@ function renderCalendar() {
     if (tours.length) {
       const indicator = document.createElement("div");
       const hasPending = tours.some((t) => t.status === "pending");
-      indicator.className = `tour-indicator ${hasPending ? "pending" : "accepted"}`;
+      indicator.className = `tour-indicator ${hasPending ? "pending" : `accepted ${getAcceptedToursColorClass(tours)}`}`;
       indicator.textContent = String(tours.length);
       cell.appendChild(indicator);
     }
@@ -1282,7 +1305,8 @@ function renderTourItem(tour) {
   const tourIsPast = tour.date < getTodayISO();
   const isPrivate = isPrivateForViewer(tour);
   const row = document.createElement("button");
-  row.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}${tourIsPast ? " past" : ""}`;
+  const acceptedColorClass = tour.status === "accepted" ? ` ${getGuideColorClass(tour.guide_id)}` : "";
+  row.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${tourIsPast ? " past" : ""}`;
   row.type = "button";
   row.addEventListener("click", () => openTourModal(tour));
 

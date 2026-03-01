@@ -584,6 +584,14 @@ h1 {
   background: #2fa14f;
 }
 
+.tour-indicator.accepted.guide-color-1 {
+  background: #2fa14f;
+}
+
+.tour-indicator.accepted.guide-color-2 {
+  background: #1f4f8f;
+}
+
 .tour-indicator.pending {
   background: #f5a623;
   color: #1a1a1a;
@@ -664,8 +672,32 @@ h1 {
   background: #e6f6e6;
 }
 
+.tour-row.accepted.guide-color-1 {
+  background: #2fa14f;
+  color: #ffffff;
+  border-color: #277f3f;
+}
+
+.tour-row.accepted.guide-color-2 {
+  background: #1f4f8f;
+  color: #ffffff;
+  border-color: #173c6b;
+}
+
 .tour-row.accepted.past {
   background: #dbe6ff;
+}
+
+.tour-row.accepted.guide-color-1.past {
+  background: #8fc9a0;
+  color: #10351a;
+  border-color: #6faa80;
+}
+
+.tour-row.accepted.guide-color-2.past {
+  background: #9db7da;
+  color: #10263e;
+  border-color: #7d9bc4;
 }
 
 .tour-row.pending {
