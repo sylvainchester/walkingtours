@@ -4,10 +4,12 @@
   "dependencies": {
     "@sparticuz/chromium": "latest",
     "@supabase/supabase-js": "^2.49.1",
+    "googleapis": "^171.4.0",
     "puppeteer-core": "^24.4.0",
     "web-push": "^3.6.7"
   },
   "scripts": {
-    "build": "node build-config.js"
+    "build": "node build-config.js",
+    "gmail:token": "node get-gmail-refresh-token.js"
   }
 }
