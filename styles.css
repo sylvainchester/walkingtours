@@ -808,13 +808,6 @@ h1 {
   .tour-config-page .app {
     padding-bottom: 120px;
   }
-  .tour-config-page .form-col,
-  .tour-config-page .compact-two-col {
-    grid-template-columns: 1fr;
-  }
-  .tour-config-page .platform-description-field {
-    grid-column: auto;
-  }
 }
 
 @media (max-width: 520px) {
