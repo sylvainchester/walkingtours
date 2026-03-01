@@ -28,16 +28,32 @@ const platformRequiresInvoice = document.getElementById("platformRequiresInvoice
 const platformEmail = document.getElementById("platformEmail");
 const addPlatform = document.getElementById("addPlatform");
 const platformsDraftList = document.getElementById("platformsDraftList");
+const templateEndDate = document.getElementById("templateEndDate");
+const templateWeekday = document.getElementById("templateWeekday");
+const templateTime = document.getElementById("templateTime");
+const addTemplate = document.getElementById("addTemplate");
+const templatesDraftList = document.getElementById("templatesDraftList");
 
 let session = null;
 let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
 let activeType = null;
 let draftPlatforms = [];
+let draftTemplates = [];
+
+const weekdayOptions = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 0, label: "Sunday" },
+];
 
 function bindFocusScroll() {
   const fields = document.querySelectorAll(
-    "#typeName, #ticketPrice, #platformName, #platformCommission, #platformEmail, #paymentType"
+    "#typeName, #ticketPrice, #platformName, #platformCommission, #platformEmail, #paymentType, #templateEndDate, #templateWeekday, #templateTime"
   );
   fields.forEach((field) => {
     field.addEventListener("focus", () => {
@@ -69,6 +85,60 @@ function normalizePlatform(platform) {
 
 function clonePlatforms(platforms) {
   return Array.isArray(platforms) ? platforms.map((platform) => normalizePlatform(platform)) : [];
+}
+
+function normalizeTemplate(template) {
+  return {
+    id: template.id || crypto.randomUUID(),
+    weekday: Number(template.weekday),
+    start_time: String(template.start_time || "").slice(0, 5),
+  };
+}
+
+function cloneTemplates(templates) {
+  return Array.isArray(templates) ? templates.map((template) => normalizeTemplate(template)) : [];
+}
+
+function formatTemplateLabel(template) {
+  const weekdayLabel = weekdayOptions.find((option) => option.value === Number(template.weekday))?.label || "Day";
+  return `${weekdayLabel} · ${template.start_time}`;
+}
+
+function addMinutesToTime(value, minutesToAdd) {
+  const [h, m] = String(value || "").split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return "";
+  const total = h * 60 + m + minutesToAdd;
+  const newH = Math.floor(total / 60) % 24;
+  const newM = total % 60;
+  return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+}
+
+function getTodayISO() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function populateWeekdaySelect(select) {
+  if (!select || select.childElementCount > 0) return;
+  weekdayOptions.forEach((optionData) => {
+    const option = document.createElement("option");
+    option.value = String(optionData.value);
+    option.textContent = optionData.label;
+    select.appendChild(option);
+  });
+}
+
+function populateTimeSelect(select) {
+  if (!select || select.childElementCount > 0) return;
+  for (let hour = 0; hour < 24; hour += 1) {
+    for (let minute = 0; minute < 60; minute += 30) {
+      const option = document.createElement("option");
+      const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      option.value = value;
+      option.textContent = value;
+      select.appendChild(option);
+    }
+  }
 }
 
 function renderPlatformsList(target, platforms, onRemove, readOnly = false) {
@@ -103,11 +173,47 @@ function renderPlatformsList(target, platforms, onRemove, readOnly = false) {
   });
 }
 
+function renderTemplatesList(target, templates, onRemove, readOnly = false) {
+  clearChildren(target);
+  if (!templates.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "No templates yet.";
+    target.appendChild(empty);
+    return;
+  }
+
+  templates.forEach((template, index) => {
+    const row = document.createElement("div");
+    row.className = "platform-row";
+
+    const text = document.createElement("div");
+    text.textContent = formatTemplateLabel(template);
+    row.appendChild(text);
+
+    if (!readOnly && onRemove) {
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "ghost";
+      removeBtn.textContent = "Delete";
+      removeBtn.addEventListener("click", () => onRemove(index));
+      row.appendChild(removeBtn);
+    }
+
+    target.appendChild(row);
+  });
+}
+
 function clearPlatformDraftInputs() {
   platformName.value = "";
   platformCommission.value = "";
   platformRequiresInvoice.checked = true;
   platformEmail.value = "";
+}
+
+function clearTemplateDraftInputs() {
+  if (templateWeekday) templateWeekday.selectedIndex = 0;
+  if (templateTime) templateTime.selectedIndex = 0;
 }
 
 function addDraftPlatform() {
@@ -140,6 +246,34 @@ function renderDraftPlatforms() {
   });
 }
 
+function renderDraftTemplates() {
+  renderTemplatesList(templatesDraftList, draftTemplates, (index) => {
+    draftTemplates.splice(index, 1);
+    renderDraftTemplates();
+  });
+}
+
+function addDraftTemplate() {
+  const weekday = Number(templateWeekday?.value ?? "");
+  const startTime = templateTime?.value || "";
+  if (!templateEndDate?.value) {
+    setStatus("Template end date is required.");
+    return;
+  }
+  if (!startTime || Number.isNaN(weekday)) {
+    setStatus("Template day and hour are required.");
+    return;
+  }
+  if (draftTemplates.some((template) => template.weekday === weekday && template.start_time === startTime)) {
+    setStatus("This schedule template already exists.");
+    return;
+  }
+  draftTemplates.push(normalizeTemplate({ weekday, start_time: startTime }));
+  clearTemplateDraftInputs();
+  renderDraftTemplates();
+  setStatus("Schedule template added.");
+}
+
 function applyNewTypeVisibility() {
   const isFree = paymentType.value === "free";
   ticketPriceField.style.display = isFree ? "none" : "";
@@ -149,6 +283,137 @@ function applyNewTypeVisibility() {
     platformRateLabel.textContent = isFree ? "Fee per participant" : "Commission %";
   }
   platformCommission.placeholder = isFree ? "Fee per participant" : "Commission %";
+}
+
+function buildScheduledTours(typeRecord) {
+  const templates = cloneTemplates(typeRecord.schedule_templates);
+  const endDate = typeRecord.template_end_date;
+  if (!templates.length || !endDate) return [];
+
+  const todayIso = getTodayISO();
+  const startDate = new Date(`${todayIso}T00:00:00`);
+  const lastDate = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(lastDate.getTime()) || lastDate < startDate) return [];
+
+  const generated = [];
+  for (let cursor = new Date(startDate); cursor <= lastDate; cursor.setDate(cursor.getDate() + 1)) {
+    const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    templates.forEach((template) => {
+      if (cursor.getDay() !== Number(template.weekday)) return;
+      generated.push({
+        source_template_id: template.id,
+        date: iso,
+        start_time: template.start_time,
+        end_time: addMinutesToTime(template.start_time, 90),
+      });
+    });
+  }
+  return generated;
+}
+
+async function syncScheduledTours(typeRecord) {
+  const todayIso = getTodayISO();
+  const desiredTours = buildScheduledTours(typeRecord);
+  const desiredKeys = new Set(
+    desiredTours.map((tour) => `${tour.date}|${tour.source_template_id}`)
+  );
+
+  const { data: existingGenerated, error: generatedError } = await supabase
+    .from("tours")
+    .select("id,date,start_time,end_time,source_template_id")
+    .eq("source_tour_type_id", typeRecord.id)
+    .gte("date", todayIso);
+  if (generatedError) {
+    throw new Error(`Template sync load error: ${generatedError.message}`);
+  }
+
+  const generatedByKey = new Map(
+    (existingGenerated || []).map((tour) => [`${tour.date}|${tour.source_template_id}`, tour])
+  );
+
+  const deletions = (existingGenerated || [])
+    .filter((tour) => !desiredKeys.has(`${tour.date}|${tour.source_template_id}`))
+    .map((tour) => tour.id);
+  if (deletions.length) {
+    const { error: deleteError } = await supabase
+      .from("tours")
+      .delete()
+      .in("id", deletions);
+    if (deleteError) {
+      throw new Error(`Template sync delete error: ${deleteError.message}`);
+    }
+  }
+
+  if (!desiredTours.length) return;
+
+  const minDate = desiredTours[0].date;
+  const maxDate = desiredTours[desiredTours.length - 1].date;
+  const { data: allTours, error: allToursError } = await supabase
+    .from("tours")
+    .select("id,date,start_time,end_time,source_tour_type_id,source_template_id")
+    .eq("guide_id", typeRecord.guide_id)
+    .gte("date", minDate)
+    .lte("date", maxDate);
+  if (allToursError) {
+    throw new Error(`Template sync conflict error: ${allToursError.message}`);
+  }
+
+  const occupiedSlots = new Set(
+    (allTours || [])
+      .filter((tour) => tour.source_tour_type_id !== typeRecord.id)
+      .map((tour) => `${tour.date}|${tour.start_time}|${tour.end_time}`)
+  );
+
+  const inserts = desiredTours
+    .filter((tour) => !generatedByKey.has(`${tour.date}|${tour.source_template_id}`))
+    .filter((tour) => !occupiedSlots.has(`${tour.date}|${tour.start_time}|${tour.end_time}`))
+    .map((tour) => ({
+      guide_id: typeRecord.guide_id,
+      created_by: typeRecord.guide_id,
+      status: "accepted",
+      date: tour.date,
+      start_time: tour.start_time,
+      end_time: tour.end_time,
+      type: typeRecord.name,
+      is_private: typeRecord.shareable === false,
+      platform: Array.isArray(typeRecord.platforms) && typeRecord.platforms.length ? typeRecord.platforms[0] : null,
+      source_tour_type_id: typeRecord.id,
+      source_template_id: tour.source_template_id,
+    }));
+
+  if (inserts.length) {
+    const { error: insertError } = await supabase.from("tours").insert(inserts);
+    if (insertError) {
+      throw new Error(`Template sync insert error: ${insertError.message}`);
+    }
+  }
+
+  const updates = desiredTours
+    .map((tour) => {
+      const existing = generatedByKey.get(`${tour.date}|${tour.source_template_id}`);
+      if (!existing) return null;
+      const nextPlatform = Array.isArray(typeRecord.platforms) && typeRecord.platforms.length ? typeRecord.platforms[0] : null;
+      return {
+        id: existing.id,
+        type: typeRecord.name,
+        is_private: typeRecord.shareable === false,
+        platform: nextPlatform,
+        start_time: tour.start_time,
+        end_time: tour.end_time,
+      };
+    })
+    .filter(Boolean);
+
+  for (const updateRow of updates) {
+    const { id, ...payload } = updateRow;
+    const { error: updateError } = await supabase
+      .from("tours")
+      .update(payload)
+      .eq("id", id);
+    if (updateError) {
+      throw new Error(`Template sync update error: ${updateError.message}`);
+    }
+  }
 }
 
 async function refreshShareInviteIndicators() {
@@ -310,10 +575,92 @@ function buildModalPlatformSection(platforms, isOwner) {
   return { wrapper, refresh };
 }
 
+function buildModalTemplateSection(templates, endDateValue, isOwner) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "details-content";
+
+  const endDateField = document.createElement("label");
+  endDateField.className = "field";
+  const endDateLabel = document.createElement("span");
+  endDateLabel.textContent = "End date";
+  const endDateInput = document.createElement("input");
+  endDateInput.className = "input";
+  endDateInput.type = "date";
+  endDateInput.value = endDateValue || "";
+  endDateInput.disabled = !isOwner;
+  endDateField.appendChild(endDateLabel);
+  endDateField.appendChild(endDateInput);
+  wrapper.appendChild(endDateField);
+
+  const list = document.createElement("div");
+  list.className = "platform-list";
+  const refresh = () => {
+    renderTemplatesList(list, templates, (index) => {
+      templates.splice(index, 1);
+      refresh();
+    }, !isOwner);
+  };
+  refresh();
+  wrapper.appendChild(list);
+
+  if (!isOwner) return { wrapper, endDateInput };
+
+  const form = document.createElement("div");
+  form.className = "form-col compact-two-col";
+
+  const weekdaySelect = document.createElement("select");
+  weekdaySelect.className = "select";
+  populateWeekdaySelect(weekdaySelect);
+
+  const timeSelect = document.createElement("select");
+  timeSelect.className = "select";
+  populateTimeSelect(timeSelect);
+
+  const makeField = (labelText, inputEl) => {
+    const label = document.createElement("label");
+    label.className = "field";
+    const span = document.createElement("span");
+    span.textContent = labelText;
+    label.appendChild(span);
+    label.appendChild(inputEl);
+    return label;
+  };
+
+  form.appendChild(makeField("Day", weekdaySelect));
+  form.appendChild(makeField("Hour", timeSelect));
+  wrapper.appendChild(form);
+
+  const actions = document.createElement("div");
+  actions.className = "form-row";
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "ghost";
+  addBtn.textContent = "Add template";
+  addBtn.addEventListener("click", () => {
+    if (!endDateInput.value) {
+      setStatus("Template end date is required.");
+      return;
+    }
+    const weekday = Number(weekdaySelect.value);
+    const startTime = timeSelect.value || "";
+    if (templates.some((template) => template.weekday === weekday && template.start_time === startTime)) {
+      setStatus("This schedule template already exists.");
+      return;
+    }
+    templates.push(normalizeTemplate({ weekday, start_time: startTime }));
+    refresh();
+  });
+  actions.appendChild(addBtn);
+  wrapper.appendChild(actions);
+
+  return { wrapper, endDateInput };
+}
+
 function renderTypeModal(type) {
   clearChildren(typeModalBody);
   const isOwner = type.guide_id === session.user.id;
   const platforms = clonePlatforms(type.platforms);
+  const templates = cloneTemplates(type.schedule_templates);
 
   const form = document.createElement("div");
   form.className = "form-col compact-two-col";
@@ -365,6 +712,14 @@ function renderTypeModal(type) {
   platformTitle.className = "details-title strong-title modal-section-title";
   platformTitle.textContent = "Platforms";
   const { wrapper: platformWrapper } = buildModalPlatformSection(platforms, isOwner);
+  const templateTitle = document.createElement("div");
+  templateTitle.className = "details-title strong-title modal-section-title";
+  templateTitle.textContent = "Schedule Template";
+  const { wrapper: templateWrapper, endDateInput: modalTemplateEndDate } = buildModalTemplateSection(
+    templates,
+    type.template_end_date,
+    isOwner
+  );
   const modalRateLabel = platformWrapper.querySelector(".platform-rate-label");
   const modalRateInput = platformWrapper.querySelector('input[type="number"]');
 
@@ -389,6 +744,8 @@ function renderTypeModal(type) {
   typeModalBody.appendChild(form);
   typeModalBody.appendChild(platformTitle);
   typeModalBody.appendChild(platformWrapper);
+  typeModalBody.appendChild(templateTitle);
+  typeModalBody.appendChild(templateWrapper);
   applyVisibility();
 
   const actions = document.createElement("div");
@@ -422,6 +779,10 @@ function renderTypeModal(type) {
         return;
       }
     }
+    if (templates.length && !modalTemplateEndDate?.value) {
+      setStatus("Template end date is required.");
+      return;
+    }
 
     const { data: existingType, error: existingTypeError } = await supabase
       .from("tour_types")
@@ -449,6 +810,8 @@ function renderTypeModal(type) {
       ticket_price: isFree ? null : Number(priceInput.value),
       fee_per_participant: null,
       platforms,
+      schedule_templates: templates,
+      template_end_date: modalTemplateEndDate?.value || null,
       commission_percent: null,
       invoice_org_name: null,
       invoice_org_address: null,
@@ -460,6 +823,18 @@ function renderTypeModal(type) {
       .eq("id", type.id);
     if (updateError) {
       setStatus(`Save error: ${updateError.message}`);
+      return;
+    }
+
+    try {
+      await syncScheduledTours({
+        ...type,
+        ...payload,
+        id: type.id,
+        guide_id: type.guide_id,
+      });
+    } catch (syncError) {
+      setStatus(syncError.message);
       return;
     }
 
@@ -489,6 +864,12 @@ function renderTypeModal(type) {
   deleteBtn.addEventListener("click", async () => {
     if (!isOwner) return;
     if (!confirm("Delete this tour type?")) return;
+    const todayIso = getTodayISO();
+    await supabase
+      .from("tours")
+      .delete()
+      .eq("source_tour_type_id", type.id)
+      .gte("date", todayIso);
     const { error } = await supabase.from("tour_types").delete().eq("id", type.id);
     if (error) {
       setStatus(`Delete error: ${error.message}`);
@@ -510,7 +891,7 @@ async function loadTypes() {
 
   const { data, error } = await supabase
     .from("tour_types")
-    .select("id,guide_id,name,description,ticket_price,payment_type,fee_per_participant,shareable,platforms")
+    .select("id,guide_id,name,description,ticket_price,payment_type,fee_per_participant,shareable,platforms,schedule_templates,template_end_date")
     .order("name");
 
   if (error) {
@@ -531,10 +912,11 @@ async function loadTypes() {
       ? `${ownerProfile.first_name} ${ownerProfile.last_name}`
       : "Unknown";
     const platformCount = Array.isArray(type.platforms) ? type.platforms.length : 0;
+    const templateCount = Array.isArray(type.schedule_templates) ? type.schedule_templates.length : 0;
     const row = document.createElement("button");
     row.type = "button";
     row.className = "tour-row accepted";
-    row.textContent = `${type.name} · ${ownerName}${type.payment_type === "prepaid" ? ` · ${platformCount} platform${platformCount === 1 ? "" : "s"}` : " · Free tour"}`;
+    row.textContent = `${type.name} · ${ownerName} · ${platformCount} platform${platformCount === 1 ? "" : "s"} · ${templateCount} template${templateCount === 1 ? "" : "s"}`;
     row.addEventListener("click", () => openTypeModal(type));
     typesList.appendChild(row);
   });
@@ -557,6 +939,10 @@ async function addNewType() {
     setStatus(`Add at least one platform for a ${isFree ? "free" : "pre-paid"} tour.`);
     return;
   }
+  if (draftTemplates.length && !templateEndDate.value) {
+    setStatus("Template end date is required.");
+    return;
+  }
 
   const { data: existing, error: existingError } = await supabase
     .from("tour_types")
@@ -573,7 +959,7 @@ async function addNewType() {
     return;
   }
 
-  const { error } = await supabase.from("tour_types").insert({
+  const { data: insertedType, error } = await supabase.from("tour_types").insert({
     guide_id: session.user.id,
     payment_type: paymentType.value,
     shareable: typeShareable ? typeShareable.checked : true,
@@ -582,12 +968,21 @@ async function addNewType() {
     ticket_price: isFree ? null : Number(ticketPrice.value),
     fee_per_participant: null,
     platforms: draftPlatforms,
+    schedule_templates: draftTemplates,
+    template_end_date: templateEndDate.value || null,
     commission_percent: null,
     invoice_org_name: null,
     invoice_org_address: null,
-  });
+  }).select("id,guide_id,name,shareable,payment_type,platforms,schedule_templates,template_end_date").single();
   if (error) {
     setStatus(`Add error: ${error.message}`);
+    return;
+  }
+
+  try {
+    await syncScheduledTours(insertedType);
+  } catch (syncError) {
+    setStatus(syncError.message);
     return;
   }
 
@@ -598,8 +993,12 @@ async function addNewType() {
   ticketPrice.value = "";
   feePerParticipant.value = "";
   draftPlatforms = [];
+  draftTemplates = [];
   clearPlatformDraftInputs();
+  clearTemplateDraftInputs();
+  if (templateEndDate) templateEndDate.value = "";
   renderDraftPlatforms();
+  renderDraftTemplates();
   applyNewTypeVisibility();
   await loadTypes();
 }
@@ -614,13 +1013,17 @@ async function init() {
   await ensurePushSubscription(supabase, session);
   await refreshShareInviteIndicators();
   await loadSharedGuides();
+  populateWeekdaySelect(templateWeekday);
+  populateTimeSelect(templateTime);
   renderDraftPlatforms();
+  renderDraftTemplates();
   applyNewTypeVisibility();
   bindFocusScroll();
   await loadTypes();
 }
 
 if (addPlatform) addPlatform.addEventListener("click", addDraftPlatform);
+if (addTemplate) addTemplate.addEventListener("click", addDraftTemplate);
 if (addType) addType.addEventListener("click", addNewType);
 if (paymentType) paymentType.addEventListener("change", applyNewTypeVisibility);
 
