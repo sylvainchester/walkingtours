@@ -34,6 +34,7 @@ let session = null;
 let toursByDate = new Map();
 let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
+let shareValidationByGuideId = new Map();
 let availabilityDates = new Set();
 let selectedGuideId = null;
 let onlyMyTours = true;
@@ -175,7 +176,7 @@ async function loadGuideProfileById(guideId) {
 async function loadTourTypeForTour(tour) {
   const { data } = await supabase
     .from("tour_types")
-    .select("name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address")
+    .select("name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address,platforms")
     .eq("guide_id", tour.guide_id)
     .eq("name", tour.type)
     .maybeSingle();
@@ -184,7 +185,7 @@ async function loadTourTypeForTour(tour) {
   // Fallback: some existing tours may reference a shared type name owned by another guide.
   const { data: byName } = await supabase
     .from("tour_types")
-    .select("guide_id,name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address")
+    .select("guide_id,name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address,platforms")
     .ilike("name", tour.type);
   if (!byName || byName.length === 0) return null;
 
@@ -351,12 +352,13 @@ function isPrivateForViewer(tour) {
 async function loadSharedGuides() {
   sharedGuideIds = new Set();
   sharedGuideProfiles = new Map();
+  shareValidationByGuideId = new Map();
   if (!session) return;
   sharedGuideIds.add(session.user.id);
 
   const { data, error } = await supabase
     .from("guide_shares")
-    .select("guide_id,shared_with_id")
+    .select("guide_id,shared_with_id,requires_tour_validation")
     .or(`guide_id.eq.${session.user.id},shared_with_id.eq.${session.user.id}`);
 
   if (error || !data) return;
@@ -364,6 +366,12 @@ async function loadSharedGuides() {
   data.forEach((row) => {
     if (row.guide_id) sharedGuideIds.add(row.guide_id);
     if (row.shared_with_id) sharedGuideIds.add(row.shared_with_id);
+    if (row.guide_id === session.user.id && row.shared_with_id) {
+      shareValidationByGuideId.set(row.shared_with_id, row.requires_tour_validation !== false);
+    }
+    if (row.shared_with_id === session.user.id && row.guide_id) {
+      shareValidationByGuideId.set(row.guide_id, row.requires_tour_validation !== false);
+    }
   });
 
   const { data: profiles, error: profileError } = await supabase
@@ -385,7 +393,7 @@ async function loadTourTypes() {
   if (!session || sharedGuideIds.size === 0) return;
   const { data, error } = await supabase
     .from("tour_types")
-    .select("id,guide_id,name,shareable,payment_type,fee_per_participant")
+    .select("id,guide_id,name,shareable,payment_type,fee_per_participant,platforms")
     .order("name");
   if (error || !data) return;
   tourTypes = data;
@@ -436,7 +444,7 @@ async function loadMonthTours() {
   const { start, end } = getMonthRange(viewYear, viewMonth);
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,attendance_status),guide_id,created_by,status,participants_locked")
+    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,attendance_status),guide_id,created_by,status,participants_locked")
     .gte("date", start)
     .lte("date", end)
     .in("guide_id", guideIds)
@@ -553,6 +561,11 @@ function createTourTypeSelect(value) {
   return select;
 }
 
+function getPlatformsForType(type) {
+  if (!type || type.payment_type === "free") return [];
+  return Array.isArray(type.platforms) ? type.platforms : [];
+}
+
 function findTourById(id) {
   for (const list of toursByDate.values()) {
     const tour = list.find((t) => t.id === id);
@@ -598,6 +611,7 @@ function renderTourModal(tour) {
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast && !isLocked && !isPrivate;
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
   const typeForTour = tourTypes.find((t) => t.guide_id === tour.guide_id && t.name === tour.type) || null;
+  const platformForTour = tour.platform || getPlatformsForType(typeForTour)[0] || null;
   const isFreeTour = typeForTour?.payment_type === "free" || /free/i.test(String(tour.type || ""));
   const feePerParticipant = Number(typeForTour?.fee_per_participant || 0);
   const unresolvedParticipants = (tour.participants || []).filter(
@@ -925,33 +939,42 @@ function renderTourModal(tour) {
           updatePayload.platform_due_amount = Number((arrivedPersonsCount * effectiveFee).toFixed(2));
           updatePayload.invoice_path = null;
         } else {
-          const isLocalHost = window.location.hostname === "localhost" || window.location.hostname === "0.0.0.0";
-          const invoiceApiUrl = isLocalHost
-            ? "https://walkingtours.vercel.app/api/generate-invoice"
-            : "/api/generate-invoice";
-          const { data: authData } = await supabase.auth.getSession();
-          const accessToken = authData?.session?.access_token;
-          if (!accessToken) {
-            alert("Auth session missing.");
+          const effectivePlatform = tour.platform || getPlatformsForType(liveType)[0] || null;
+          if (!effectivePlatform) {
+            alert("No platform is configured for this pre-paid tour.");
             return;
           }
-          const response = await fetch(invoiceApiUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ tour_id: tour.id }),
-        });
-          const contentType = response.headers.get("content-type") || "";
-          const result = contentType.includes("application/json")
-            ? await response.json()
-            : { ok: false, error: await response.text() };
-          if (!response.ok || !result?.ok || !result?.filePath) {
-            alert(`Invoice generation error: ${result?.error || "Unknown error"}`);
-            return;
+          if (effectivePlatform.requires_invoice === false) {
+            updatePayload.invoice_path = null;
+          } else {
+            const isLocalHost = window.location.hostname === "localhost" || window.location.hostname === "0.0.0.0";
+            const invoiceApiUrl = isLocalHost
+              ? "https://walkingtours.vercel.app/api/generate-invoice"
+              : "/api/generate-invoice";
+            const { data: authData } = await supabase.auth.getSession();
+            const accessToken = authData?.session?.access_token;
+            if (!accessToken) {
+              alert("Auth session missing.");
+              return;
+            }
+            const response = await fetch(invoiceApiUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ tour_id: tour.id }),
+            });
+            const contentType = response.headers.get("content-type") || "";
+            const result = contentType.includes("application/json")
+              ? await response.json()
+              : { ok: false, error: await response.text() };
+            if (!response.ok || !result?.ok || !result?.filePath) {
+              alert(`Invoice generation error: ${result?.error || "Unknown error"}`);
+              return;
+            }
+            updatePayload.invoice_path = result.filePath;
           }
-          updatePayload.invoice_path = result.filePath;
           updatePayload.free_amount_received = null;
           updatePayload.platform_due_amount = null;
         }
@@ -1067,13 +1090,10 @@ function renderTourModal(tour) {
       sendBtn.className = "ghost";
       sendBtn.textContent = "Send invoice email";
       sendBtn.addEventListener("click", async () => {
-        const [typeInfo, guideInfo] = await Promise.all([
-          loadTourTypeForTour(tour),
-          loadGuideProfileById(tour.guide_id),
-        ]);
-        const toEmail = extractEmail(typeInfo?.invoice_org_address);
+        const guideInfo = await loadGuideProfileById(tour.guide_id);
+        const toEmail = extractEmail(platformForTour?.email);
         if (!toEmail) {
-          alert("Invoice email is missing in Tour configuration.");
+          alert("Invoice email is missing for this platform.");
           return;
         }
         const { data, error } = await supabase.storage
@@ -1270,20 +1290,75 @@ async function showDetails(iso) {
     if (session && id === session.user.id) option.selected = true;
     guideSelect.appendChild(option);
   });
+  const hasAvailableGuide = guideSelect.options.length > 0;
+  if (!hasAvailableGuide) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No guide available";
+    option.selected = true;
+    guideSelect.appendChild(option);
+    guideSelect.disabled = true;
+  }
 
   const startInput = document.createElement("input");
   startInput.type = "time";
   startInput.className = "input time-input";
 
   const typeSelect = createTourTypeSelect(tourTypes[0]?.id);
+  const platformSelect = document.createElement("select");
+  platformSelect.className = "select";
+
+  const refreshPlatformSelect = () => {
+    clearChildren(platformSelect);
+    const selectedType = tourTypes.find((type) => type.id === typeSelect.value);
+    const platforms = getPlatformsForType(selectedType);
+    const needsPlatform = selectedType && selectedType.payment_type !== "free";
+
+    if (!needsPlatform) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No platform";
+      option.selected = true;
+      platformSelect.appendChild(option);
+      platformSelect.disabled = true;
+      platformSelect.style.display = "none";
+      return;
+    }
+
+    platformSelect.style.display = "";
+    if (!platforms.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No platform configured";
+      option.selected = true;
+      platformSelect.appendChild(option);
+      platformSelect.disabled = true;
+      return;
+    }
+
+    platformSelect.disabled = false;
+    platforms.forEach((platform) => {
+      const option = document.createElement("option");
+      option.value = platform.id || platform.name;
+      option.textContent = platform.name || "Platform";
+      platformSelect.appendChild(option);
+    });
+  };
+  refreshPlatformSelect();
+  typeSelect.addEventListener("change", refreshPlatformSelect);
 
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "primary";
   addBtn.textContent = "Add tour";
+  addBtn.disabled = !hasAvailableGuide;
   addBtn.addEventListener("click", async () => {
     if (!tourTypes.length) {
       alert("Please create a tour type first.");
+      return;
+    }
+    if (!hasAvailableGuide) {
+      alert("No guide is available for this day.");
       return;
     }
     if (!startInput.value) {
@@ -1297,7 +1372,16 @@ async function showDetails(iso) {
       alert("Please select a tour type.");
       return;
     }
-    const status = selectedGuide === session.user.id ? "accepted" : "pending";
+    const selectedPlatform = getPlatformsForType(selectedType)
+      .find((platform) => (platform.id || platform.name) === platformSelect.value) || null;
+    if (selectedType.payment_type !== "free" && !selectedPlatform) {
+      alert("Please select a platform.");
+      return;
+    }
+    const needsValidation = selectedGuide === session.user.id
+      ? false
+      : shareValidationByGuideId.get(selectedGuide) !== false;
+    const status = needsValidation ? "pending" : "accepted";
     const { data: conflicts } = await supabase
       .from("tours")
       .select("id,start_time,end_time,status")
@@ -1319,13 +1403,16 @@ async function showDetails(iso) {
       end_time: endValue,
       type: selectedType.name,
       is_private: selectedType.shareable === false,
+      platform: selectedPlatform,
     });
     if (!error) {
       if (selectedGuide !== session.user.id) {
         await sendPush(supabase, {
           to_user_id: selectedGuide,
-          title: "New tour pending",
-          body: `A tour is waiting for your approval on ${iso} at ${(startInput.value || "").slice(0, 5)}.`,
+          title: needsValidation ? "New tour pending" : "New tour booked",
+          body: needsValidation
+            ? `A tour is waiting for your approval on ${iso} at ${(startInput.value || "").slice(0, 5)}.`
+            : `A new tour was booked for you on ${iso} at ${(startInput.value || "").slice(0, 5)}.`,
           data: { url: "./index.html" },
         });
       }
@@ -1335,12 +1422,19 @@ async function showDetails(iso) {
 
   createForm.appendChild(startInput);
   createForm.appendChild(typeSelect);
+  createForm.appendChild(platformSelect);
   createForm.appendChild(guideSelect);
   createForm.appendChild(addBtn);
 
   if (!isPastDate) {
     createCard.appendChild(createTitle);
     createCard.appendChild(createForm);
+    if (!hasAvailableGuide) {
+      const unavailableNote = document.createElement("div");
+      unavailableNote.className = "muted";
+      unavailableNote.textContent = "No available guide for this day. Update availability first.";
+      createCard.appendChild(unavailableNote);
+    }
     detailsContent.appendChild(createCard);
   }
 

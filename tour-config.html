@@ -37,7 +37,7 @@
 
       <section class="details" aria-live="polite">
         <div class="details-title">New Tour Type</div>
-          <div class="details-content">
+        <div class="details-content">
           <div class="form-col">
             <label class="field">
               <span>Payment type</span>
@@ -54,23 +54,11 @@
               <span>Tour name</span>
               <input id="typeName" class="input" type="text" placeholder="Tour name" />
             </label>
-            <label class="field">
+            <label class="field" id="ticketPriceField">
               <span>Ticket price</span>
               <input id="ticketPrice" class="input" type="number" step="0.01" placeholder="Ticket price" />
             </label>
-            <label class="field">
-              <span>Commission %</span>
-              <input id="commission" class="input" type="number" step="0.01" placeholder="Commission %" />
-            </label>
-            <label class="field">
-              <span>Invoice org name</span>
-              <input id="invoiceOrgName" class="input" type="text" placeholder="Invoice organization name" />
-            </label>
-            <label class="field">
-              <span>Invoice email</span>
-              <input id="invoiceOrgAddress" class="input" type="text" placeholder="Invoice email" />
-            </label>
-            <label class="field">
+            <label class="field" id="feePerParticipantField">
               <span>Fee per participant</span>
               <input id="feePerParticipant" class="input" type="number" step="0.01" placeholder="Fee per participant" />
             </label>
@@ -78,9 +66,40 @@
               <span>Description</span>
               <input id="typeDescription" class="input" type="text" placeholder="Description" />
             </label>
-            <div class="form-row">
-              <button id="addType" class="primary" type="button">Add</button>
+          </div>
+
+          <div id="platformSection" class="details-content">
+            <div class="details-title">Platforms</div>
+            <div class="form-col compact-two-col">
+              <label class="field">
+                <span>Platform name</span>
+                <input id="platformName" class="input" type="text" placeholder="Platform name" />
+              </label>
+              <label class="field">
+                <span>Commission %</span>
+                <input id="platformCommission" class="input" type="number" step="0.01" placeholder="Commission %" />
+              </label>
+              <label class="field checkbox-field">
+                <span>Invoice required</span>
+                <input id="platformRequiresInvoice" class="checkbox" type="checkbox" checked />
+              </label>
+              <label class="field">
+                <span>Email</span>
+                <input id="platformEmail" class="input" type="text" placeholder="Email (optional)" />
+              </label>
+              <label class="field platform-description-field">
+                <span>Description</span>
+                <input id="platformDescription" class="input" type="text" placeholder="Description (optional)" />
+              </label>
             </div>
+            <div class="form-row">
+              <button id="addPlatform" class="ghost" type="button">Add platform</button>
+            </div>
+            <div id="platformsDraftList" class="platform-list"></div>
+          </div>
+
+          <div class="form-row">
+            <button id="addType" class="primary" type="button">Create Tour Type</button>
           </div>
           <div id="typeStatus" class="muted"></div>
         </div>

@@ -358,6 +358,18 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.compact-two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.checkbox-field {
+  align-content: end;
+}
+
+.platform-description-field {
+  grid-column: 1 / -1;
+}
+
 
 .auth {
   display: grid;
@@ -744,6 +756,31 @@ h1 {
 .participant.absent {
   background: #fde7e7;
   border-color: #f2b3b3;
+}
+
+.share-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.platform-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.platform-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--cell-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fffdf7;
 }
 
 @media (max-width: 720px) {

@@ -95,7 +95,7 @@ module.exports = async (req, res) => {
 
     const { data: tour, error: tourError } = await supabase
       .from("tours")
-      .select("id,date,type,guide_id,created_by,status,participants(id,name,group_size,attendance_status)")
+      .select("id,date,type,platform,guide_id,created_by,status,participants(id,name,group_size,attendance_status)")
       .eq("id", tourId)
       .maybeSingle();
     if (tourError || !tour) return json(res, 404, { ok: false, error: "Tour not found" });
@@ -122,7 +122,7 @@ module.exports = async (req, res) => {
         .maybeSingle(),
       supabase
         .from("tour_types")
-        .select("payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name")
+        .select("payment_type,ticket_price,fee_per_participant,platforms")
         .eq("guide_id", tour.guide_id)
         .eq("name", tour.type)
         .maybeSingle(),
@@ -133,6 +133,14 @@ module.exports = async (req, res) => {
     if (tourType.payment_type === "free") {
       return json(res, 400, { ok: false, error: "Free tours do not generate invoices" });
     }
+    const platforms = Array.isArray(tourType.platforms) ? tourType.platforms : [];
+    const selectedPlatform = tour.platform || platforms[0] || null;
+    if (!selectedPlatform) {
+      return json(res, 400, { ok: false, error: "No platform configured for this tour" });
+    }
+    if (selectedPlatform.requires_invoice === false) {
+      return json(res, 400, { ok: false, error: "This platform does not require an invoice" });
+    }
 
     const personsTotal = computeInvoicePersons(tour.participants || []);
     const unitPrice = Number(
@@ -140,7 +148,7 @@ module.exports = async (req, res) => {
         ? (tourType.fee_per_participant ?? 0)
         : (tourType.ticket_price ?? 0)
     );
-    const commissionPct = Number(tourType.commission_percent ?? 0);
+    const commissionPct = Number(selectedPlatform.commission_percent ?? 0);
     const gross = unitPrice * personsTotal;
     const commission = (gross * commissionPct) / 100;
     const total = gross - commission;
@@ -166,7 +174,7 @@ module.exports = async (req, res) => {
       invoiceNo,
       guideFirstName: profile.first_name || "",
       guideLastName: profile.last_name || "",
-      clientName: tourType.invoice_org_name || "Invoice client",
+      clientName: selectedPlatform.name || "Invoice client",
       prettyDate,
       bookingRef,
       tourLabel: tour.type || "Tour",

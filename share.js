@@ -94,7 +94,7 @@ async function loadShares() {
 
   const { data: shares, error } = await supabase
     .from("guide_shares")
-    .select("id,guide_id,shared_with_id,created_at")
+    .select("id,guide_id,shared_with_id,created_at,requires_tour_validation")
     .or(`guide_id.eq.${session.user.id},shared_with_id.eq.${session.user.id}`)
     .order("created_at", { ascending: false });
 
@@ -146,6 +146,32 @@ async function loadShares() {
     const text = document.createElement("div");
     text.textContent = `${direction}: ${label}`;
 
+    const settings = document.createElement("label");
+    settings.className = "share-setting";
+
+    const validationToggle = document.createElement("input");
+    validationToggle.type = "checkbox";
+    validationToggle.checked = share.requires_tour_validation !== false;
+    validationToggle.addEventListener("change", async () => {
+      const checked = validationToggle.checked;
+      const { error: updateError } = await supabase
+        .from("guide_shares")
+        .update({ requires_tour_validation: checked })
+        .eq("id", share.id);
+      if (updateError) {
+        validationToggle.checked = !checked;
+        setStatus(`Update error: ${updateError.message}`);
+        return;
+      }
+      setStatus(checked ? "Tour validation required." : "Tours will be accepted automatically.");
+    });
+
+    const settingsText = document.createElement("span");
+    settingsText.textContent = "Validation required";
+
+    settings.appendChild(validationToggle);
+    settings.appendChild(settingsText);
+
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "ghost";
@@ -172,6 +198,7 @@ async function loadShares() {
     });
 
     row.appendChild(text);
+    row.appendChild(settings);
     row.appendChild(remove);
     shareList.appendChild(row);
   });
@@ -258,6 +285,7 @@ async function loadPendingInvites() {
         const { error: shareError } = await supabase.from("guide_shares").insert({
           guide_id: session.user.id,
           shared_with_id: invite.from_guide_id,
+          requires_tour_validation: true,
         });
 
         if (shareError) {

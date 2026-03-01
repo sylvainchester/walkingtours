@@ -6,9 +6,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const typeName = document.getElementById("typeName");
 const ticketPrice = document.getElementById("ticketPrice");
-const commission = document.getElementById("commission");
-const invoiceOrgName = document.getElementById("invoiceOrgName");
-const invoiceOrgAddress = document.getElementById("invoiceOrgAddress");
 const typeDescription = document.getElementById("typeDescription");
 const paymentType = document.getElementById("paymentType");
 const typeShareable = document.getElementById("typeShareable");
@@ -22,11 +19,122 @@ const avatarDropdown = document.getElementById("avatarDropdown");
 const typeModal = document.getElementById("typeModal");
 const typeModalBody = document.getElementById("typeModalBody");
 const typeModalClose = document.getElementById("typeModalClose");
+const ticketPriceField = document.getElementById("ticketPriceField");
+const feePerParticipantField = document.getElementById("feePerParticipantField");
+const platformSection = document.getElementById("platformSection");
+const platformName = document.getElementById("platformName");
+const platformCommission = document.getElementById("platformCommission");
+const platformRequiresInvoice = document.getElementById("platformRequiresInvoice");
+const platformEmail = document.getElementById("platformEmail");
+const platformDescription = document.getElementById("platformDescription");
+const addPlatform = document.getElementById("addPlatform");
+const platformsDraftList = document.getElementById("platformsDraftList");
 
 let session = null;
 let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
 let activeType = null;
+let draftPlatforms = [];
+
+function setStatus(message) {
+  if (typeStatus) typeStatus.textContent = message || "";
+}
+
+function clearChildren(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function normalizePlatform(platform) {
+  return {
+    id: platform.id || crypto.randomUUID(),
+    name: String(platform.name || "").trim(),
+    commission_percent: Number(platform.commission_percent || 0),
+    requires_invoice: platform.requires_invoice !== false,
+    email: String(platform.email || "").trim() || null,
+    description: String(platform.description || "").trim() || null,
+  };
+}
+
+function clonePlatforms(platforms) {
+  return Array.isArray(platforms) ? platforms.map((platform) => normalizePlatform(platform)) : [];
+}
+
+function renderPlatformsList(target, platforms, onRemove, readOnly = false) {
+  clearChildren(target);
+  if (!platforms.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "No platforms yet.";
+    target.appendChild(empty);
+    return;
+  }
+
+  platforms.forEach((platform, index) => {
+    const row = document.createElement("div");
+    row.className = "platform-row";
+
+    const text = document.createElement("div");
+    const invoiceLabel = platform.requires_invoice ? "invoice" : "no invoice";
+    text.textContent = `${platform.name} · ${platform.commission_percent}% · ${invoiceLabel}`;
+    row.appendChild(text);
+
+    if (!readOnly && onRemove) {
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "ghost";
+      removeBtn.textContent = "Delete";
+      removeBtn.addEventListener("click", () => onRemove(index));
+      row.appendChild(removeBtn);
+    }
+
+    target.appendChild(row);
+  });
+}
+
+function clearPlatformDraftInputs() {
+  platformName.value = "";
+  platformCommission.value = "";
+  platformRequiresInvoice.checked = true;
+  platformEmail.value = "";
+  platformDescription.value = "";
+}
+
+function addDraftPlatform() {
+  const name = platformName.value.trim();
+  const commissionValue = Number(platformCommission.value || "");
+  if (!name) {
+    setStatus("Platform name is required.");
+    return;
+  }
+  if (!Number.isFinite(commissionValue) || commissionValue < 0) {
+    setStatus("Platform commission must be a valid number.");
+    return;
+  }
+  draftPlatforms.push(normalizePlatform({
+    name,
+    commission_percent: commissionValue,
+    requires_invoice: platformRequiresInvoice.checked,
+    email: platformEmail.value,
+    description: platformDescription.value,
+  }));
+  clearPlatformDraftInputs();
+  renderDraftPlatforms();
+  setStatus("Platform added.");
+}
+
+function renderDraftPlatforms() {
+  renderPlatformsList(platformsDraftList, draftPlatforms, (index) => {
+    draftPlatforms.splice(index, 1);
+    renderDraftPlatforms();
+  });
+}
+
+function applyNewTypeVisibility() {
+  const isFree = paymentType.value === "free";
+  ticketPriceField.style.display = isFree ? "none" : "";
+  feePerParticipantField.style.display = isFree ? "" : "none";
+  platformSection.style.display = isFree ? "none" : "";
+}
 
 async function refreshShareInviteIndicators() {
   if (!session) return;
@@ -40,194 +148,6 @@ async function refreshShareInviteIndicators() {
   avatarButton?.classList.toggle("has-pending-dot", hasPending);
   avatarDropdown?.querySelector('a[href="share.html"]')
     ?.classList.toggle("has-pending-dot", hasPending);
-}
-
-function setStatus(message) {
-  if (typeStatus) typeStatus.textContent = message || "";
-}
-
-function clearChildren(node) {
-  while (node.firstChild) node.removeChild(node.firstChild);
-}
-
-function openTypeModal(type) {
-  if (!typeModal || !typeModalBody) return;
-  activeType = type;
-  typeModal.classList.add("open");
-  typeModal.setAttribute("aria-hidden", "false");
-  renderTypeModal(type);
-}
-
-function closeTypeModal() {
-  if (!typeModal || !typeModalBody) return;
-  typeModal.classList.remove("open");
-  typeModal.setAttribute("aria-hidden", "true");
-  activeType = null;
-}
-
-function renderTypeModal(type) {
-  clearChildren(typeModalBody);
-  const isOwner = type.guide_id === session.user.id;
-
-  const form = document.createElement("div");
-  form.className = "form-col";
-
-  const makeLabeled = (labelText, inputEl) => {
-    const wrap = document.createElement("label");
-    wrap.className = "field";
-    const label = document.createElement("span");
-    label.textContent = labelText;
-    wrap.appendChild(label);
-    wrap.appendChild(inputEl);
-    return wrap;
-  };
-
-  const paymentSelect = document.createElement("select");
-  paymentSelect.className = "select";
-  ["prepaid", "free"].forEach((val) => {
-    const opt = document.createElement("option");
-    opt.value = val;
-    opt.textContent = val === "prepaid" ? "Pre-paid" : "Free tour";
-    if ((type.payment_type || "prepaid") === val) opt.selected = true;
-    paymentSelect.appendChild(opt);
-  });
-
-  const nameInput = document.createElement("input");
-  nameInput.className = "input";
-  nameInput.value = type.name || "";
-
-  const shareableInput = document.createElement("input");
-  shareableInput.className = "checkbox";
-  shareableInput.type = "checkbox";
-  shareableInput.checked = type.shareable !== false;
-
-  const priceInput = document.createElement("input");
-  priceInput.className = "input";
-  priceInput.type = "number";
-  priceInput.step = "0.01";
-  priceInput.value = type.ticket_price ?? "";
-
-  const commissionInput = document.createElement("input");
-  commissionInput.className = "input";
-  commissionInput.type = "number";
-  commissionInput.step = "0.01";
-  commissionInput.value = type.commission_percent ?? "";
-
-  const orgNameInput = document.createElement("input");
-  orgNameInput.className = "input";
-  orgNameInput.value = type.invoice_org_name || "";
-
-  const orgAddressInput = document.createElement("input");
-  orgAddressInput.className = "input";
-  orgAddressInput.value = type.invoice_org_address || "";
-
-  const feeInput = document.createElement("input");
-  feeInput.className = "input";
-  feeInput.type = "number";
-  feeInput.step = "0.01";
-  feeInput.value = type.fee_per_participant ?? "";
-
-  const descInput = document.createElement("input");
-  descInput.className = "input";
-  descInput.value = type.description || "";
-
-  [paymentSelect, shareableInput, nameInput, priceInput, commissionInput, orgNameInput, orgAddressInput, feeInput, descInput].forEach((el) => {
-    el.disabled = !isOwner;
-  });
-
-  const paymentWrap = makeLabeled("Payment type", paymentSelect);
-  const shareableWrap = makeLabeled("Shareable", shareableInput);
-  const nameWrap = makeLabeled("Tour name", nameInput);
-  const priceWrap = makeLabeled("Ticket price", priceInput);
-  const commissionWrap = makeLabeled("Commission %", commissionInput);
-  const orgNameWrap = makeLabeled("Invoice org name", orgNameInput);
-  const orgAddressWrap = makeLabeled("Invoice email", orgAddressInput);
-  const feeWrap = makeLabeled("Fee per participant", feeInput);
-  const descWrap = makeLabeled("Description", descInput);
-
-  const applyPaymentVisibility = () => {
-    const isFree = paymentSelect.value === "free";
-    priceWrap.style.display = isFree ? "none" : "";
-    commissionWrap.style.display = isFree ? "none" : "";
-    orgNameWrap.style.display = isFree ? "none" : "";
-    orgAddressWrap.style.display = isFree ? "none" : "";
-    feeWrap.style.display = isFree ? "" : "none";
-  };
-  applyPaymentVisibility();
-  paymentSelect.addEventListener("change", applyPaymentVisibility);
-
-  const saveBtn = document.createElement("button");
-  saveBtn.className = "primary";
-  saveBtn.type = "button";
-  saveBtn.textContent = "Save";
-  saveBtn.disabled = !isOwner;
-  saveBtn.addEventListener("click", async () => {
-    if (!isOwner) return;
-    const prevShareable = type.shareable !== false;
-    const { error: updateError } = await supabase
-      .from("tour_types")
-      .update({
-        payment_type: paymentSelect.value,
-        shareable: shareableInput.checked,
-        name: nameInput.value.trim(),
-        ticket_price: priceInput.value === "" ? null : Number(priceInput.value),
-        commission_percent: commissionInput.value === "" ? null : Number(commissionInput.value),
-        invoice_org_name: orgNameInput.value.trim() || null,
-        invoice_org_address: orgAddressInput.value.trim() || null,
-        fee_per_participant: feeInput.value === "" ? null : Number(feeInput.value),
-        description: descInput.value.trim() || null,
-      })
-      .eq("id", type.id);
-    if (updateError) {
-      setStatus(`Save error: ${updateError.message}`);
-    } else {
-      if (prevShareable !== shareableInput.checked) {
-        await supabase
-          .from("tours")
-          .update({ is_private: shareableInput.checked ? false : true })
-          .eq("guide_id", type.guide_id)
-          .eq("type", type.name);
-      }
-      setStatus("Saved.");
-      await loadTypes();
-      closeTypeModal();
-    }
-  });
-
-  const deleteBtn = document.createElement("button");
-  deleteBtn.className = "ghost";
-  deleteBtn.type = "button";
-  deleteBtn.textContent = "Delete";
-  deleteBtn.disabled = !isOwner;
-  deleteBtn.addEventListener("click", async () => {
-    if (!isOwner) return;
-    if (!confirm("Delete this tour type?")) return;
-    const { error: deleteError } = await supabase.from("tour_types").delete().eq("id", type.id);
-    if (deleteError) {
-      setStatus(`Delete error: ${deleteError.message}`);
-    } else {
-      await loadTypes();
-      closeTypeModal();
-    }
-  });
-
-  form.appendChild(paymentWrap);
-  form.appendChild(shareableWrap);
-  form.appendChild(nameWrap);
-  form.appendChild(priceWrap);
-  form.appendChild(commissionWrap);
-  form.appendChild(orgNameWrap);
-  form.appendChild(orgAddressWrap);
-  form.appendChild(feeWrap);
-  form.appendChild(descWrap);
-
-  const actions = document.createElement("div");
-  actions.className = "form-row";
-  actions.appendChild(saveBtn);
-  actions.appendChild(deleteBtn);
-  form.appendChild(actions);
-
-  typeModalBody.appendChild(form);
 }
 
 async function loadSharedGuides() {
@@ -254,8 +174,327 @@ async function loadSharedGuides() {
     .in("id", Array.from(sharedGuideIds));
 
   if (profiles) {
-    profiles.forEach((p) => sharedGuideProfiles.set(p.id, p));
+    profiles.forEach((profile) => sharedGuideProfiles.set(profile.id, profile));
   }
+}
+
+function closeTypeModal() {
+  if (!typeModal || !typeModalBody) return;
+  typeModal.classList.remove("open");
+  typeModal.setAttribute("aria-hidden", "true");
+  activeType = null;
+}
+
+function openTypeModal(type) {
+  if (!typeModal || !typeModalBody) return;
+  activeType = type;
+  typeModal.classList.add("open");
+  typeModal.setAttribute("aria-hidden", "false");
+  renderTypeModal(type);
+}
+
+function buildModalPlatformSection(platforms, isOwner) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "details-content";
+
+  const list = document.createElement("div");
+  list.className = "platform-list";
+
+  const refresh = () => {
+    renderPlatformsList(list, platforms, (index) => {
+      platforms.splice(index, 1);
+      refresh();
+    }, !isOwner);
+  };
+  refresh();
+  wrapper.appendChild(list);
+
+  if (!isOwner) return { wrapper, refresh };
+
+  const form = document.createElement("div");
+  form.className = "form-col compact-two-col";
+
+  const makeField = (labelText, inputEl) => {
+    const label = document.createElement("label");
+    label.className = `field${inputEl.type === "checkbox" ? " checkbox-field" : ""}`;
+    const span = document.createElement("span");
+    span.textContent = labelText;
+    label.appendChild(span);
+    label.appendChild(inputEl);
+    return label;
+  };
+
+  const nameInput = document.createElement("input");
+  nameInput.className = "input";
+  nameInput.type = "text";
+  nameInput.placeholder = "Platform name";
+
+  const commissionInput = document.createElement("input");
+  commissionInput.className = "input";
+  commissionInput.type = "number";
+  commissionInput.step = "0.01";
+  commissionInput.placeholder = "Commission %";
+
+  const invoiceInput = document.createElement("input");
+  invoiceInput.className = "checkbox";
+  invoiceInput.type = "checkbox";
+  invoiceInput.checked = true;
+
+  const emailInput = document.createElement("input");
+  emailInput.className = "input";
+  emailInput.type = "text";
+  emailInput.placeholder = "Email (optional)";
+
+  const descriptionInput = document.createElement("input");
+  descriptionInput.className = "input";
+  descriptionInput.type = "text";
+  descriptionInput.placeholder = "Description (optional)";
+
+  const descriptionField = makeField("Description", descriptionInput);
+  descriptionField.classList.add("platform-description-field");
+
+  form.appendChild(makeField("Platform name", nameInput));
+  form.appendChild(makeField("Commission %", commissionInput));
+  form.appendChild(makeField("Invoice required", invoiceInput));
+  form.appendChild(makeField("Email", emailInput));
+  form.appendChild(descriptionField);
+  wrapper.appendChild(form);
+
+  const actions = document.createElement("div");
+  actions.className = "form-row";
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "ghost";
+  addBtn.textContent = "Add platform";
+  addBtn.addEventListener("click", () => {
+    const name = nameInput.value.trim();
+    const commissionValue = Number(commissionInput.value || "");
+    if (!name) {
+      setStatus("Platform name is required.");
+      return;
+    }
+    if (!Number.isFinite(commissionValue) || commissionValue < 0) {
+      setStatus("Platform commission must be a valid number.");
+      return;
+    }
+    platforms.push(normalizePlatform({
+      name,
+      commission_percent: commissionValue,
+      requires_invoice: invoiceInput.checked,
+      email: emailInput.value,
+      description: descriptionInput.value,
+    }));
+    nameInput.value = "";
+    commissionInput.value = "";
+    invoiceInput.checked = true;
+    emailInput.value = "";
+    descriptionInput.value = "";
+    refresh();
+  });
+  actions.appendChild(addBtn);
+  wrapper.appendChild(actions);
+
+  return { wrapper, refresh };
+}
+
+function renderTypeModal(type) {
+  clearChildren(typeModalBody);
+  const isOwner = type.guide_id === session.user.id;
+  const platforms = clonePlatforms(type.platforms);
+
+  const form = document.createElement("div");
+  form.className = "form-col";
+
+  const makeField = (labelText, inputEl) => {
+    const label = document.createElement("label");
+    label.className = `field${inputEl.type === "checkbox" ? " checkbox-field" : ""}`;
+    const span = document.createElement("span");
+    span.textContent = labelText;
+    label.appendChild(span);
+    label.appendChild(inputEl);
+    return label;
+  };
+
+  const paymentSelect = document.createElement("select");
+  paymentSelect.className = "select";
+  [
+    { value: "prepaid", label: "Pre-paid" },
+    { value: "free", label: "Free tour" },
+  ].forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.label;
+    if ((type.payment_type || "prepaid") === item.value) option.selected = true;
+    paymentSelect.appendChild(option);
+  });
+
+  const shareableInput = document.createElement("input");
+  shareableInput.className = "checkbox";
+  shareableInput.type = "checkbox";
+  shareableInput.checked = type.shareable !== false;
+
+  const nameInput = document.createElement("input");
+  nameInput.className = "input";
+  nameInput.value = type.name || "";
+
+  const priceInput = document.createElement("input");
+  priceInput.className = "input";
+  priceInput.type = "number";
+  priceInput.step = "0.01";
+  priceInput.value = type.ticket_price ?? "";
+
+  const feeInput = document.createElement("input");
+  feeInput.className = "input";
+  feeInput.type = "number";
+  feeInput.step = "0.01";
+  feeInput.value = type.fee_per_participant ?? "";
+
+  const descInput = document.createElement("input");
+  descInput.className = "input";
+  descInput.value = type.description || "";
+
+  [paymentSelect, shareableInput, nameInput, priceInput, feeInput, descInput].forEach((el) => {
+    el.disabled = !isOwner;
+  });
+
+  const priceWrap = makeField("Ticket price", priceInput);
+  const feeWrap = makeField("Fee per participant", feeInput);
+  const platformTitle = document.createElement("div");
+  platformTitle.className = "details-title";
+  platformTitle.textContent = "Platforms";
+  const { wrapper: platformWrapper } = buildModalPlatformSection(platforms, isOwner);
+
+  const applyVisibility = () => {
+    const isFree = paymentSelect.value === "free";
+    priceWrap.style.display = isFree ? "none" : "";
+    feeWrap.style.display = isFree ? "" : "none";
+    platformTitle.style.display = isFree ? "none" : "";
+    platformWrapper.style.display = isFree ? "none" : "";
+  };
+  paymentSelect.addEventListener("change", applyVisibility);
+
+  form.appendChild(makeField("Payment type", paymentSelect));
+  form.appendChild(makeField("Shareable", shareableInput));
+  form.appendChild(makeField("Tour name", nameInput));
+  form.appendChild(priceWrap);
+  form.appendChild(feeWrap);
+  form.appendChild(makeField("Description", descInput));
+  form.appendChild(platformTitle);
+  form.appendChild(platformWrapper);
+  applyVisibility();
+
+  const actions = document.createElement("div");
+  actions.className = "form-row";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "primary";
+  saveBtn.type = "button";
+  saveBtn.textContent = "Save";
+  saveBtn.disabled = !isOwner;
+  saveBtn.addEventListener("click", async () => {
+    if (!isOwner) return;
+    const name = nameInput.value.trim();
+    const isFree = paymentSelect.value === "free";
+    if (!name) {
+      setStatus("Tour name is required.");
+      return;
+    }
+    if (isFree) {
+      if (feeInput.value === "") {
+        setStatus("Fee per participant is required for free tours.");
+        return;
+      }
+    } else {
+      if (priceInput.value === "") {
+        setStatus("Ticket price is required for pre-paid tours.");
+        return;
+      }
+      if (!platforms.length) {
+        setStatus("Add at least one platform for a pre-paid tour.");
+        return;
+      }
+    }
+
+    const { data: existingType, error: existingTypeError } = await supabase
+      .from("tour_types")
+      .select("id")
+      .eq("guide_id", type.guide_id)
+      .ilike("name", name)
+      .neq("id", type.id)
+      .maybeSingle();
+    if (existingTypeError) {
+      setStatus(`Check error: ${existingTypeError.message}`);
+      return;
+    }
+    if (existingType) {
+      setStatus("You already have a tour type with this name.");
+      return;
+    }
+
+    const oldName = type.name;
+    const prevShareable = type.shareable !== false;
+    const payload = {
+      payment_type: paymentSelect.value,
+      shareable: shareableInput.checked,
+      name,
+      description: descInput.value.trim() || null,
+      ticket_price: isFree ? null : Number(priceInput.value),
+      fee_per_participant: isFree ? Number(feeInput.value) : null,
+      platforms: isFree ? [] : platforms,
+      commission_percent: null,
+      invoice_org_name: null,
+      invoice_org_address: null,
+    };
+
+    const { error: updateError } = await supabase
+      .from("tour_types")
+      .update(payload)
+      .eq("id", type.id);
+    if (updateError) {
+      setStatus(`Save error: ${updateError.message}`);
+      return;
+    }
+
+    const toursUpdate = {};
+    if (oldName !== name) toursUpdate.type = name;
+    if (prevShareable !== shareableInput.checked) {
+      toursUpdate.is_private = shareableInput.checked ? false : true;
+    }
+    if (Object.keys(toursUpdate).length > 0) {
+      await supabase
+        .from("tours")
+        .update(toursUpdate)
+        .eq("guide_id", type.guide_id)
+        .eq("type", oldName);
+    }
+
+    setStatus("Saved.");
+    await loadTypes();
+    closeTypeModal();
+  });
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "ghost";
+  deleteBtn.type = "button";
+  deleteBtn.textContent = "Delete";
+  deleteBtn.disabled = !isOwner;
+  deleteBtn.addEventListener("click", async () => {
+    if (!isOwner) return;
+    if (!confirm("Delete this tour type?")) return;
+    const { error } = await supabase.from("tour_types").delete().eq("id", type.id);
+    if (error) {
+      setStatus(`Delete error: ${error.message}`);
+      return;
+    }
+    setStatus("Deleted.");
+    await loadTypes();
+    closeTypeModal();
+  });
+
+  actions.appendChild(saveBtn);
+  actions.appendChild(deleteBtn);
+  form.appendChild(actions);
+  typeModalBody.appendChild(form);
 }
 
 async function loadTypes() {
@@ -264,7 +503,7 @@ async function loadTypes() {
 
   const { data, error } = await supabase
     .from("tour_types")
-    .select("id,guide_id,name,description,ticket_price,commission_percent,invoice_org_name,invoice_org_address,payment_type,fee_per_participant,shareable")
+    .select("id,guide_id,name,description,ticket_price,payment_type,fee_per_participant,shareable,platforms")
     .order("name");
 
   if (error) {
@@ -284,11 +523,11 @@ async function loadTypes() {
     const ownerName = ownerProfile
       ? `${ownerProfile.first_name} ${ownerProfile.last_name}`
       : "Unknown";
-
+    const platformCount = Array.isArray(type.platforms) ? type.platforms.length : 0;
     const row = document.createElement("button");
     row.type = "button";
     row.className = "tour-row accepted";
-    row.textContent = `${type.name} · ${ownerName}`;
+    row.textContent = `${type.name} · ${ownerName}${type.payment_type === "prepaid" ? ` · ${platformCount} platform${platformCount === 1 ? "" : "s"}` : " · Free tour"}`;
     row.addEventListener("click", () => openTypeModal(type));
     typesList.appendChild(row);
   });
@@ -297,19 +536,24 @@ async function loadTypes() {
 async function addNewType() {
   if (!session) return;
   const name = typeName.value.trim();
+  const isFree = paymentType.value === "free";
+
   if (!name) {
     setStatus("Tour name is required.");
     return;
   }
-  const isFree = paymentType.value === "free";
   if (isFree) {
     if (feePerParticipant.value === "") {
       setStatus("Fee per participant is required for free tours.");
       return;
     }
   } else {
-    if (ticketPrice.value === "" || commission.value === "" || invoiceOrgName.value.trim() === "") {
-      setStatus("Ticket price, commission, and invoice org name are required.");
+    if (ticketPrice.value === "") {
+      setStatus("Ticket price is required for pre-paid tours.");
+      return;
+    }
+    if (!draftPlatforms.length) {
+      setStatus("Add at least one platform for a pre-paid tour.");
       return;
     }
   }
@@ -335,36 +579,30 @@ async function addNewType() {
     shareable: typeShareable ? typeShareable.checked : true,
     name,
     description: typeDescription.value.trim() || null,
-    ticket_price: isFree ? null : (ticketPrice.value === "" ? null : Number(ticketPrice.value)),
-    commission_percent: isFree ? null : (commission.value === "" ? null : Number(commission.value)),
-    invoice_org_name: isFree ? null : (invoiceOrgName.value.trim() || null),
-    invoice_org_address: isFree ? null : (invoiceOrgAddress.value.trim() || null),
-    fee_per_participant: isFree ? (feePerParticipant.value === "" ? null : Number(feePerParticipant.value)) : null,
+    ticket_price: isFree ? null : Number(ticketPrice.value),
+    fee_per_participant: isFree ? Number(feePerParticipant.value) : null,
+    platforms: isFree ? [] : draftPlatforms,
+    commission_percent: null,
+    invoice_org_name: null,
+    invoice_org_address: null,
   });
   if (error) {
     setStatus(`Add error: ${error.message}`);
-  } else {
-    setStatus("Type added.");
-    paymentType.value = "prepaid";
-    if (typeShareable) typeShareable.checked = true;
-    typeName.value = "";
-    ticketPrice.value = "";
-    commission.value = "";
-    invoiceOrgName.value = "";
-    invoiceOrgAddress.value = "";
-    feePerParticipant.value = "";
-    typeDescription.value = "";
-    await loadTypes();
+    return;
   }
-}
 
-function applyNewTypeVisibility() {
-  const isFree = paymentType.value === "free";
-  ticketPrice.parentElement.style.display = isFree ? "none" : "";
-  commission.parentElement.style.display = isFree ? "none" : "";
-  invoiceOrgName.parentElement.style.display = isFree ? "none" : "";
-  invoiceOrgAddress.parentElement.style.display = isFree ? "none" : "";
-  feePerParticipant.parentElement.style.display = isFree ? "" : "none";
+  setStatus("Type added.");
+  paymentType.value = "prepaid";
+  if (typeShareable) typeShareable.checked = true;
+  typeName.value = "";
+  ticketPrice.value = "";
+  feePerParticipant.value = "";
+  typeDescription.value = "";
+  draftPlatforms = [];
+  clearPlatformDraftInputs();
+  renderDraftPlatforms();
+  applyNewTypeVisibility();
+  await loadTypes();
 }
 
 async function init() {
@@ -377,14 +615,14 @@ async function init() {
   await ensurePushSubscription(supabase, session);
   await refreshShareInviteIndicators();
   await loadSharedGuides();
+  renderDraftPlatforms();
+  applyNewTypeVisibility();
   await loadTypes();
 }
 
+if (addPlatform) addPlatform.addEventListener("click", addDraftPlatform);
 if (addType) addType.addEventListener("click", addNewType);
-if (paymentType) {
-  paymentType.addEventListener("change", applyNewTypeVisibility);
-  applyNewTypeVisibility();
-}
+if (paymentType) paymentType.addEventListener("change", applyNewTypeVisibility);
 
 if (signOutBtn) {
   signOutBtn.addEventListener("click", async () => {
