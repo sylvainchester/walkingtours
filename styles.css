@@ -806,6 +806,35 @@ h1 {
   background: #fffdf7;
 }
 
+.modal-section-title {
+  margin-top: 6px;
+}
+
+.participant-platform-label {
+  min-width: 72px;
+}
+
+.participant-add-row {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.participant-add-row .input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.participant-add-row .input[type="number"] {
+  width: 84px;
+  flex: 0 0 auto;
+}
+
+.modal-footer-actions {
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
 @media (max-width: 720px) {
   h1 { font-size: 28px; }
   .day { font-size: 16px; }

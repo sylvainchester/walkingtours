@@ -316,7 +316,7 @@ function renderTypeModal(type) {
   const platforms = clonePlatforms(type.platforms);
 
   const form = document.createElement("div");
-  form.className = "form-col";
+  form.className = "form-col compact-two-col";
 
   const makeField = (labelText, inputEl) => {
     const label = document.createElement("label");
@@ -362,7 +362,7 @@ function renderTypeModal(type) {
 
   const priceWrap = makeField("Ticket price", priceInput);
   const platformTitle = document.createElement("div");
-  platformTitle.className = "details-title";
+  platformTitle.className = "details-title strong-title modal-section-title";
   platformTitle.textContent = "Platforms";
   const { wrapper: platformWrapper } = buildModalPlatformSection(platforms, isOwner);
   const modalRateLabel = platformWrapper.querySelector(".platform-rate-label");
@@ -386,8 +386,9 @@ function renderTypeModal(type) {
   form.appendChild(makeField("Shareable", shareableInput));
   form.appendChild(makeField("Tour name", nameInput));
   form.appendChild(priceWrap);
-  form.appendChild(platformTitle);
-  form.appendChild(platformWrapper);
+  typeModalBody.appendChild(form);
+  typeModalBody.appendChild(platformTitle);
+  typeModalBody.appendChild(platformWrapper);
   applyVisibility();
 
   const actions = document.createElement("div");
@@ -500,8 +501,7 @@ function renderTypeModal(type) {
 
   actions.appendChild(saveBtn);
   actions.appendChild(deleteBtn);
-  form.appendChild(actions);
-  typeModalBody.appendChild(form);
+  typeModalBody.appendChild(actions);
 }
 
 async function loadTypes() {

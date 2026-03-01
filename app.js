@@ -444,7 +444,7 @@ async function loadMonthTours() {
   const { start, end } = getMonthRange(viewYear, viewMonth);
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,attendance_status),guide_id,created_by,status,participants_locked")
+    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
     .gte("date", start)
     .lte("date", end)
     .in("guide_id", guideIds)
@@ -612,6 +612,7 @@ function renderTourModal(tour) {
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
   const typeForTour = tourTypes.find((t) => t.guide_id === tour.guide_id && t.name === tour.type) || null;
   const platformForTour = tour.platform || getPlatformsForType(typeForTour)[0] || null;
+  const participantPlatforms = getPlatformsForType(typeForTour);
   const isFreeTour = typeForTour?.payment_type === "free" || /free/i.test(String(tour.type || ""));
   const feePerParticipant = Number(platformForTour?.commission_percent || typeForTour?.fee_per_participant || 0);
   const unresolvedParticipants = (tour.participants || []).filter(
@@ -633,59 +634,49 @@ function renderTourModal(tour) {
     && arrivedParticipants.length > 0
     && (isOwner || isCreator);
 
-  if (canDeleteTour) {
-    const deleteRow = document.createElement("div");
-    deleteRow.className = "form-row";
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "ghost";
-    deleteBtn.textContent = "Delete tour";
-    deleteBtn.addEventListener("click", async () => {
-      if (!confirm("Delete this tour?")) return;
-      if (tour.invoice_path) {
-        const { error: storageError } = await supabase.storage
-          .from("invoices")
-          .remove([tour.invoice_path]);
-        if (storageError) {
-          alert(`Invoice delete error: ${storageError.message}`);
-          return;
-        }
-      }
-      const { data: deletedRows, error } = await supabase
-        .from("tours")
-        .delete()
-        .eq("id", tour.id)
-        .select("id,guide_id,created_by,date");
-      if (error) {
-        alert(`Delete error: ${error.message}`);
+  const handleDeleteTour = async () => {
+    if (!confirm("Delete this tour?")) return;
+    if (tour.invoice_path) {
+      const { error: storageError } = await supabase.storage
+        .from("invoices")
+        .remove([tour.invoice_path]);
+      if (storageError) {
+        alert(`Invoice delete error: ${storageError.message}`);
         return;
       }
-      if (!deletedRows || deletedRows.length === 0) {
-        alert("Delete failed: not allowed.");
-        return;
-      }
+    }
+    const { data: deletedRows, error } = await supabase
+      .from("tours")
+      .delete()
+      .eq("id", tour.id)
+      .select("id,guide_id,created_by,date");
+    if (error) {
+      alert(`Delete error: ${error.message}`);
+      return;
+    }
+    if (!deletedRows || deletedRows.length === 0) {
+      alert("Delete failed: not allowed.");
+      return;
+    }
 
-      const deleted = deletedRows[0];
-      const notifyTarget =
-        deleted.created_by === session.user.id && deleted.guide_id !== session.user.id
-          ? deleted.guide_id
-          : deleted.guide_id === session.user.id && deleted.created_by && deleted.created_by !== session.user.id
-            ? deleted.created_by
-            : null;
-      if (notifyTarget) {
-        await sendPush(supabase, {
-          to_user_id: notifyTarget,
-          title: "Tour removed",
-          body: `A planned tour on ${deleted.date} was deleted.`,
-          data: { url: "./index.html" },
-        });
-      }
-      closeTourModal();
-      await loadMonthTours();
-    });
-    deleteRow.appendChild(deleteBtn);
-    modalBody.appendChild(deleteRow);
-  }
+    const deleted = deletedRows[0];
+    const notifyTarget =
+      deleted.created_by === session.user.id && deleted.guide_id !== session.user.id
+        ? deleted.guide_id
+        : deleted.guide_id === session.user.id && deleted.created_by && deleted.created_by !== session.user.id
+          ? deleted.created_by
+          : null;
+    if (notifyTarget) {
+      await sendPush(supabase, {
+        to_user_id: notifyTarget,
+        title: "Tour removed",
+        body: `A planned tour on ${deleted.date} was deleted.`,
+        data: { url: "./index.html" },
+      });
+    }
+    closeTourModal();
+    await loadMonthTours();
+  };
 
   if (tour.status === "pending" && isOwner) {
     const actions = document.createElement("div");
@@ -765,7 +756,7 @@ function renderTourModal(tour) {
       row.className = `participant${p.attendance_status ? ` ${p.attendance_status}` : ""}`;
 
       const name = document.createElement("div");
-      name.textContent = `${p.name} (${p.group_size})`;
+      name.textContent = `${p.name} (${p.group_size})${p.platform_name ? ` · ${p.platform_name}` : ""}`;
       row.appendChild(name);
 
       if (canEditParticipants) {
@@ -808,6 +799,35 @@ function renderTourModal(tour) {
   }
 
   if (canEditParticipants) {
+    const platformRow = document.createElement("div");
+    platformRow.className = "form-row";
+
+    const platformLabel = document.createElement("div");
+    platformLabel.className = "muted participant-platform-label";
+    platformLabel.textContent = "Platform";
+    platformRow.appendChild(platformLabel);
+
+    const participantPlatformSelect = document.createElement("select");
+    participantPlatformSelect.className = "select";
+    if (!participantPlatforms.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No platform configured";
+      option.selected = true;
+      participantPlatformSelect.appendChild(option);
+      participantPlatformSelect.disabled = true;
+    } else {
+      participantPlatforms.forEach((platform) => {
+        const option = document.createElement("option");
+        option.value = platform.name || "";
+        option.textContent = platform.name || "";
+        if (platformForTour && platform.name === platformForTour.name) option.selected = true;
+        participantPlatformSelect.appendChild(option);
+      });
+    }
+    platformRow.appendChild(participantPlatformSelect);
+    list.appendChild(platformRow);
+
     const importRow = document.createElement("div");
     importRow.className = "form-row";
 
@@ -819,7 +839,7 @@ function renderTourModal(tour) {
     const importBtn = document.createElement("button");
     importBtn.type = "button";
     importBtn.className = "ghost";
-    importBtn.textContent = ocrBusy ? "Importing..." : "Import participants";
+    importBtn.textContent = ocrBusy ? "Importing..." : "Import participants from screenshot";
     importBtn.disabled = ocrBusy;
     importBtn.addEventListener("click", () => fileInput.click());
 
@@ -840,12 +860,14 @@ function renderTourModal(tour) {
           importStatus.textContent = "No participants found.";
         } else {
           importStatus.textContent = `Found ${participants.length} participants.`;
+          const platformName = participantPlatformSelect.value || null;
           if (confirm(`Import ${participants.length} participants?`)) {
             const { error } = await supabase.from("participants").insert(
               participants.map((p) => ({
                 tour_id: tour.id,
                 name: p.name,
                 group_size: p.group_size,
+                platform_name: platformName,
               }))
             );
             if (!error) {
@@ -857,7 +879,7 @@ function renderTourModal(tour) {
         importStatus.textContent = "Import failed.";
       } finally {
         ocrBusy = false;
-        importBtn.textContent = "Import participants";
+        importBtn.textContent = "Import participants from screenshot";
         importBtn.disabled = false;
         fileInput.value = "";
       }
@@ -869,7 +891,7 @@ function renderTourModal(tour) {
     list.appendChild(fileInput);
 
     const form = document.createElement("div");
-    form.className = "form-row";
+    form.className = "form-row participant-add-row";
 
     const nameInput = document.createElement("input");
     nameInput.type = "text";
@@ -894,6 +916,7 @@ function renderTourModal(tour) {
         tour_id: tour.id,
         name,
         group_size: groupSize,
+        platform_name: participantPlatformSelect.value || null,
       });
       if (!error) {
         nameInput.value = "";
@@ -910,9 +933,10 @@ function renderTourModal(tour) {
 
   modalBody.appendChild(list);
 
+  const footerActions = document.createElement("div");
+  footerActions.className = "form-row modal-footer-actions";
+
   if (canManageLock && !isLocked) {
-    const lockRow = document.createElement("div");
-    lockRow.className = "form-row";
     const lockBtn = document.createElement("button");
     lockBtn.type = "button";
     lockBtn.className = "ghost danger";
@@ -992,7 +1016,7 @@ function renderTourModal(tour) {
         await loadMonthTours();
       }
     });
-    lockRow.appendChild(lockBtn);
+    footerActions.appendChild(lockBtn);
     if (!canLockParticipants) {
       const reason = document.createElement("div");
       reason.className = "muted";
@@ -1007,9 +1031,8 @@ function renderTourModal(tour) {
       } else if (arrivedParticipants.length === 0) {
         reason.textContent = "At least one participant must be marked as arrived.";
       }
-      lockRow.appendChild(reason);
+      footerActions.appendChild(reason);
     }
-    modalBody.appendChild(lockRow);
   } else if (isLocked) {
     const lockedNote = document.createElement("div");
     lockedNote.className = "muted";
@@ -1132,6 +1155,19 @@ function renderTourModal(tour) {
     pendingNote.className = "muted";
     pendingNote.textContent = "Lock is available only after tour acceptance.";
     modalBody.appendChild(pendingNote);
+  }
+
+  if (canDeleteTour) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "ghost";
+    deleteBtn.textContent = "Delete tour";
+    deleteBtn.addEventListener("click", handleDeleteTour);
+    footerActions.appendChild(deleteBtn);
+  }
+
+  if (footerActions.childElementCount > 0) {
+    modalBody.appendChild(footerActions);
   }
 }
 
