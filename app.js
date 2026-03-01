@@ -414,27 +414,17 @@ function buildGuideFilter() {
   });
 }
 
-function getSortedGuideIds() {
-  return Array.from(sharedGuideIds).sort((a, b) => {
-    const profileA = sharedGuideProfiles.get(a);
-    const profileB = sharedGuideProfiles.get(b);
-    const nameA = profileA ? `${profileA.first_name || ""} ${profileA.last_name || ""}`.trim() : a;
-    const nameB = profileB ? `${profileB.first_name || ""} ${profileB.last_name || ""}`.trim() : b;
-    return nameA.localeCompare(nameB, "en", { sensitivity: "base" });
-  });
-}
-
 function getGuideColorClass(guideId) {
-  const orderedGuideIds = getSortedGuideIds();
-  return orderedGuideIds.indexOf(guideId) === 1 ? "guide-color-2" : "guide-color-1";
+  return guideId === session?.user?.id ? "guide-color-1" : "guide-color-2";
 }
 
 function getAcceptedToursColorClass(tours) {
   const acceptedTours = (tours || []).filter((tour) => tour.status === "accepted");
   if (!acceptedTours.length) return "guide-color-1";
-  const uniqueGuideIds = new Set(acceptedTours.map((tour) => tour.guide_id));
-  if (uniqueGuideIds.size > 1) return "guide-color-1";
-  return getGuideColorClass(acceptedTours[0].guide_id);
+  if (acceptedTours.some((tour) => tour.guide_id === session?.user?.id)) {
+    return "guide-color-1";
+  }
+  return "guide-color-2";
 }
 
 async function loadAvailabilityForSelectedGuide() {
