@@ -1511,18 +1511,6 @@ async function showDetails(iso) {
   createForm.appendChild(guideSelect);
   createForm.appendChild(addBtn);
 
-  if (!isPastDate) {
-    createCard.appendChild(createTitle);
-    createCard.appendChild(createForm);
-    if (!hasAvailableGuide) {
-      const unavailableNote = document.createElement("div");
-      unavailableNote.className = "muted";
-      unavailableNote.textContent = "No available guide for this day. Update availability first.";
-      createCard.appendChild(unavailableNote);
-    }
-    detailsContent.appendChild(createCard);
-  }
-
   const listCard = document.createElement("div");
   listCard.className = "card";
   const listTitle = document.createElement("div");
@@ -1541,6 +1529,18 @@ async function showDetails(iso) {
   }
 
   detailsContent.appendChild(listCard);
+
+  if (!isPastDate) {
+    createCard.appendChild(createTitle);
+    createCard.appendChild(createForm);
+    if (!hasAvailableGuide) {
+      const unavailableNote = document.createElement("div");
+      unavailableNote.className = "muted";
+      unavailableNote.textContent = "No available guide for this day. Update availability first.";
+      createCard.appendChild(unavailableNote);
+    }
+    detailsContent.appendChild(createCard);
+  }
 }
 
 async function handleAuthSignOut() {
