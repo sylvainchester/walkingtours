@@ -29,6 +29,10 @@ body {
   overflow-x: hidden;
 }
 
+body.readme-page {
+  overflow-y: auto;
+}
+
 .app {
   width: 100%;
   max-width: 980px;
@@ -40,6 +44,11 @@ body {
   height: calc(var(--vh, 1vh) * 100);
   min-height: 0;
   box-sizing: border-box;
+}
+
+.readme-page .app {
+  height: auto;
+  min-height: calc(var(--vh, 1vh) * 100);
 }
 
 .main-page {

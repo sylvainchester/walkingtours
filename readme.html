@@ -9,7 +9,7 @@
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="readme-page">
     <div class="app">
       <header class="topbar">
         <div>
@@ -38,43 +38,52 @@
       <section class="details" aria-live="polite">
         <div class="details-title">Overview</div>
         <div class="details-content">
-          <div>This screen explains the workflow for each role in the app.</div>
-          <div>The same calendar can be shared by multiple guides, but each role uses it differently.</div>
+          <div class="readme-line">This page explains the main workflow of the app from tour setup to final lock.</div>
+          <div class="readme-line">The app is built around shared calendars, guide availability, tour creation, participant tracking and final invoicing.</div>
         </div>
       </section>
 
       <section class="details" aria-live="polite">
-        <div class="details-title">Admin</div>
+        <div class="details-title">Tour Configuration</div>
         <div class="details-content">
-          <div class="readme-line"><strong>Tour Configuration:</strong> create and maintain the tour templates that guides can book.</div>
-          <div class="readme-line"><strong>Pre-paid tours:</strong> define ticket price, commission, invoice organization and invoice email.</div>
-          <div class="readme-line"><strong>Free tours:</strong> define the fee per participant that the guide owes to the platform after the tour.</div>
-          <div class="readme-line"><strong>Shareable / Private:</strong> shareable tour types are visible to guides sharing the calendar. Private ones remain hidden in details but still block conflicting bookings.</div>
-          <div class="readme-line"><strong>Invoice flow:</strong> when participants are locked on a pre-paid tour, the invoice PDF is generated and stored automatically.</div>
+          <div class="readme-line"><strong>Tour templates:</strong> all bookable tours are created in <em>Tour Configuration</em>.</div>
+          <div class="readme-line"><strong>Pre-paid:</strong> use this when the tour is invoiced. You define ticket price, commission, invoice organization name and invoice email.</div>
+          <div class="readme-line"><strong>Free tour:</strong> use this when guests pay the guide directly. In this case there is no invoice PDF. Instead you define the <em>fee per participant</em> owed to the platform.</div>
+          <div class="readme-line"><strong>Shareable / Private:</strong> shareable tour types can be used by guides sharing the same calendar. Private types still block conflicts but their details stay hidden from the other guide.</div>
         </div>
       </section>
 
       <section class="details" aria-live="polite">
-        <div class="details-title">Coordinator</div>
+        <div class="details-title">Share Calendar</div>
         <div class="details-content">
-          <div class="readme-line"><strong>Share My Calendar:</strong> invite another guide to work on the same calendar. Invitations must be accepted before the calendar is shared.</div>
-          <div class="readme-line"><strong>Availability:</strong> each guide marks their available days. Only available guides appear when creating a new tour.</div>
-          <div class="readme-line"><strong>Booking a tour:</strong> select a day, start time, guide and tour type. If the assigned guide is not yourself, the booking is created as <em>pending</em>.</div>
-          <div class="readme-line"><strong>Confirmation:</strong> the assigned guide must accept the pending tour. Accepted tours appear in green; pending tours appear in orange.</div>
-          <div class="readme-line"><strong>Conflicts:</strong> the app blocks overlapping tours for the same guide, including private tours not visible in detail.</div>
-          <div class="readme-line"><strong>Notifications:</strong> guides receive push notifications for share invites, accepted shares, pending tours and some tour updates.</div>
+          <div class="readme-line"><strong>Share My Calendar:</strong> one guide can invite another by email.</div>
+          <div class="readme-line"><strong>Invitation flow:</strong> the second guide receives the invitation in the Share screen and must accept it before the calendar becomes shared.</div>
+          <div class="readme-line"><strong>Shared work:</strong> once accepted, both guides can see the same calendar, coordinate bookings and follow the same tour schedule.</div>
+          <div class="readme-line"><strong>Notifications:</strong> share requests and accepted shares trigger push notifications when notifications are enabled.</div>
         </div>
       </section>
 
       <section class="details" aria-live="polite">
-        <div class="details-title">Guest</div>
+        <div class="details-title">Availability And Booking</div>
         <div class="details-content">
-          <div class="readme-line"><strong>Participants:</strong> after a tour is accepted, guides can add or import participant names and group sizes.</div>
-          <div class="readme-line"><strong>Attendance:</strong> each participant should be marked as arrived or no-show before locking the final list.</div>
-          <div class="readme-line"><strong>Lock participants:</strong> once locked, the attendance list becomes final and cannot be edited again.</div>
-          <div class="readme-line"><strong>Pre-paid tours:</strong> only arrived participants are counted on the invoice.</div>
-          <div class="readme-line"><strong>Free tours:</strong> after lock, the guide enters the amount received and the app shows what is due to the platform from the per-participant fee.</div>
-          <div class="readme-line"><strong>Invoice email:</strong> for pre-paid tours, the guide can open the PDF and prepare an email to the invoicing organization.</div>
+          <div class="readme-line"><strong>Availability:</strong> each guide must mark available days in <em>My Availability</em>.</div>
+          <div class="readme-line"><strong>Important:</strong> if a guide is not marked available on a day, that guide will not appear in the booking list for that day.</div>
+          <div class="readme-line"><strong>Create Tour:</strong> on the main calendar, pick a day, choose a start time, select the guide and select the tour type.</div>
+          <div class="readme-line"><strong>Pending tours:</strong> if you create a tour for another guide, it is created as <em>pending</em> until that guide accepts it.</div>
+          <div class="readme-line"><strong>Accepted tours:</strong> once accepted, the tour becomes active and appears as confirmed in the calendar.</div>
+          <div class="readme-line"><strong>Conflict protection:</strong> the app blocks overlapping tours for the same guide.</div>
+        </div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Participants And Lock</div>
+        <div class="details-content">
+          <div class="readme-line"><strong>Participants:</strong> after a tour is accepted, guides can add participants manually or import them from a screenshot.</div>
+          <div class="readme-line"><strong>Attendance status:</strong> each participant must be marked as <em>arrived</em> or <em>no-show</em>.</div>
+          <div class="readme-line"><strong>Lock participants:</strong> locking is final. After lock, participants can no longer be changed.</div>
+          <div class="readme-line"><strong>Validation before lock:</strong> all participants must have a status, and at least one participant must be marked as arrived.</div>
+          <div class="readme-line"><strong>Pre-paid tours:</strong> after lock, the invoice PDF is generated automatically and only arrived participants are counted.</div>
+          <div class="readme-line"><strong>Free tours:</strong> after lock, the guide can enter the amount received and the app shows the amount due to the platform based on the fee per participant.</div>
         </div>
       </section>
     </div>
