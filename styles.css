@@ -791,6 +791,15 @@ h1 {
   color: var(--muted);
 }
 
+.share-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.share-row .share-setting {
+  width: 100%;
+}
+
 .platform-list {
   display: flex;
   flex-direction: column;

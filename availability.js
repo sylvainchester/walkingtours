@@ -18,7 +18,7 @@ const today = new Date();
 let viewYear = today.getFullYear();
 let viewMonth = today.getMonth();
 let session = null;
-let availableDates = new Set();
+let unavailableDates = new Set();
 
 async function refreshShareInviteIndicators() {
   if (!session) return;
@@ -73,7 +73,7 @@ function buildWeekdayRow() {
 
 async function loadAvailability() {
   if (!session) return;
-  availableDates = new Set();
+  unavailableDates = new Set();
 
   const start = `${viewYear}-${pad2(viewMonth + 1)}-01`;
   const end = `${viewYear}-${pad2(viewMonth + 1)}-${pad2(daysInMonth(viewYear, viewMonth))}`;
@@ -84,10 +84,10 @@ async function loadAvailability() {
     .eq("guide_id", session.user.id)
     .gte("date", start)
     .lte("date", end)
-    .eq("available", true);
+    .eq("available", false);
 
   if (error || !data) return;
-  data.forEach((row) => availableDates.add(row.date));
+  data.forEach((row) => unavailableDates.add(row.date));
 }
 
 function renderCalendar() {
@@ -127,21 +127,23 @@ function renderCalendar() {
 
     if (isPastDate) {
       cell.classList.add("past");
-    } else if (availableDates.has(iso)) {
+    } else if (unavailableDates.has(iso)) {
+      cell.classList.add("unavailable");
+    } else {
       cell.classList.add("available");
     }
 
     cell.addEventListener("click", async () => {
       if (!session) return;
       if (isPastDate) return;
-      if (availableDates.has(iso)) {
+      if (unavailableDates.has(iso)) {
         const { error } = await supabase
           .from("guide_availability")
           .delete()
           .eq("guide_id", session.user.id)
           .eq("date", iso);
         if (!error) {
-          availableDates.delete(iso);
+          unavailableDates.delete(iso);
           renderCalendar();
         }
       } else {
@@ -150,10 +152,10 @@ function renderCalendar() {
           .upsert({
             guide_id: session.user.id,
             date: iso,
-            available: true,
+            available: false,
           }, { onConflict: "guide_id,date" });
         if (!error) {
-          availableDates.add(iso);
+          unavailableDates.add(iso);
           renderCalendar();
         }
       }

@@ -35,7 +35,7 @@ let toursByDate = new Map();
 let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
 let shareValidationByGuideId = new Map();
-let availabilityDates = new Set();
+let unavailableDates = new Set();
 let selectedGuideId = null;
 let onlyMyTours = true;
 let modalOpenTourId = null;
@@ -415,7 +415,7 @@ function buildGuideFilter() {
 }
 
 async function loadAvailabilityForSelectedGuide() {
-  availabilityDates = new Set();
+  unavailableDates = new Set();
   if (!session || !selectedGuideId) return;
   const { start, end } = getMonthRange(viewYear, viewMonth);
   const { data } = await supabase
@@ -424,8 +424,8 @@ async function loadAvailabilityForSelectedGuide() {
     .eq("guide_id", selectedGuideId)
     .gte("date", start)
     .lte("date", end)
-    .eq("available", true);
-  if (data) data.forEach((row) => availabilityDates.add(row.date));
+    .eq("available", false);
+  if (data) data.forEach((row) => unavailableDates.add(row.date));
 }
 
 async function loadMonthTours() {
@@ -515,10 +515,10 @@ function renderCalendar() {
     cell.setAttribute("aria-label", `${iso}`);
     if (isPastDate) {
       cell.classList.add("past");
-    } else if (availabilityDates.has(iso)) {
-      cell.classList.add("available");
-    } else {
+    } else if (unavailableDates.has(iso)) {
       cell.classList.add("unavailable");
+    } else {
+      cell.classList.add("available");
     }
     if (selectedDate === iso) cell.classList.add("selected");
 
@@ -1430,15 +1430,16 @@ async function showDetails(iso) {
 
   let availableGuideIds = new Set();
   if (sharedGuideIds.size > 0) {
-    const { data: availableRows } = await supabase
+    const { data: unavailableRows } = await supabase
       .from("guide_availability")
       .select("guide_id")
       .in("guide_id", Array.from(sharedGuideIds))
       .eq("date", iso)
-      .eq("available", true);
-    if (availableRows) {
-      availableGuideIds = new Set(availableRows.map((r) => r.guide_id));
-    }
+      .eq("available", false);
+    const unavailableGuideIds = new Set((unavailableRows || []).map((r) => r.guide_id));
+    availableGuideIds = new Set(
+      Array.from(sharedGuideIds).filter((guideId) => !unavailableGuideIds.has(guideId))
+    );
   }
 
   const guideSelect = document.createElement("select");
@@ -1467,6 +1468,7 @@ async function showDetails(iso) {
   const startInput = document.createElement("input");
   startInput.type = "time";
   startInput.className = "input time-input";
+  startInput.value = "10:30";
 
   const typeSelect = createTourTypeSelect(tourTypes[0]?.id);
   const platformSelect = document.createElement("select");

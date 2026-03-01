@@ -130,8 +130,9 @@ function populateWeekdaySelect(select) {
 
 function populateTimeSelect(select) {
   if (!select || select.childElementCount > 0) return;
-  for (let hour = 0; hour < 24; hour += 1) {
+  for (let hour = 9; hour <= 18; hour += 1) {
     for (let minute = 0; minute < 60; minute += 30) {
+      if (hour === 18 && minute > 0) continue;
       const option = document.createElement("option");
       const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
       option.value = value;

@@ -141,7 +141,7 @@ async function loadShares() {
     const direction = isOwner ? "Shared with" : "Shared by";
 
     const row = document.createElement("div");
-    row.className = "participant";
+    row.className = "participant share-row";
 
     const text = document.createElement("div");
     text.textContent = `${direction}: ${label}`;
@@ -256,7 +256,7 @@ async function loadPendingInvites() {
     const direction = isOutgoing ? "Sent to" : "Received from";
 
     const row = document.createElement("div");
-    row.className = "participant";
+    row.className = "participant share-row";
 
     const text = document.createElement("div");
     text.textContent = `${direction}: ${label}`;
