@@ -651,6 +651,37 @@ h1 {
   margin-bottom: 20px;
 }
 
+.summary-toolbar {
+  align-items: center;
+}
+
+.summary-list-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.summary-list-panel .details-content {
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.summary-check {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.summary-row-main {
+  width: 100%;
+}
+
 .day-panel {
   min-height: 0;
   overflow: hidden;
