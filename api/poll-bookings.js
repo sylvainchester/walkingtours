@@ -82,11 +82,22 @@ function trimQuotedContent(text) {
   return kept.join("\n");
 }
 
+function cleanForwardHeaders(text) {
+  return String(text || "")
+    .split("\n")
+    .filter((line) => {
+      const normalized = line.replace(/\s+/g, " ").trim();
+      if (!normalized) return true;
+      return !/^\*?(from|date|to|subject):\*?/i.test(normalized);
+    })
+    .join("\n");
+}
+
 function buildMessageText(subject, parts) {
   const preferredBody = parts.text.length
     ? parts.text.join("\n\n")
     : parts.html.map(stripHtml).join("\n\n");
-  const trimmed = trimQuotedContent(preferredBody);
+  const trimmed = cleanForwardHeaders(trimQuotedContent(preferredBody));
   return dedupeNormalizedLines([subject, trimmed].filter(Boolean).join("\n\n")).join("\n");
 }
 
@@ -153,6 +164,35 @@ function parseDates(text) {
   return [...results];
 }
 
+function extractPriorityDates(text, subject) {
+  const candidates = [];
+  const seen = new Set();
+  const pushDates = (dates) => {
+    dates.forEach((date) => {
+      if (!seen.has(date)) {
+        seen.add(date);
+        candidates.push(date);
+      }
+    });
+  };
+
+  pushDates(parseDates(subject));
+
+  const lines = normalizeLines(text);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^date and time$/i.test(line)) {
+      pushDates(parseDates(`${line}\n${lines[index + 1] || ""}\n${lines[index + 2] || ""}`));
+    }
+    if (/booked your (experience|trip) for/i.test(line)) {
+      pushDates(parseDates(line));
+    }
+  }
+
+  pushDates(parseDates(text));
+  return candidates;
+}
+
 function extractEmail(value) {
   const match = String(value || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   return match ? match[0] : null;
@@ -167,6 +207,7 @@ function parseHeaderDate(value) {
 function extractParticipants(text) {
   const lines = normalizeLines(text);
   const ignore = /booking|reservation|confirm|voucher|tour|date|time|platform|payment|status|guide|ref|reference|total|guest details/i;
+  const nonName = /^(adult|adults|child|children|kid|kids|infant|infants|guest|guests)$/i;
   const participants = [];
   let pendingName = null;
 
@@ -188,7 +229,7 @@ function extractParticipants(text) {
     const groupSize = extractGroupSize(line);
     if (groupSize > 0) {
       const name = cleanName(line);
-      if (name && !ignore.test(name)) {
+      if (name && !ignore.test(name) && !nonName.test(name)) {
         participants.push({ name, group_size: groupSize });
         pendingName = null;
         continue;
@@ -205,6 +246,7 @@ function extractParticipants(text) {
       maybeName.length >= 3
       && /[A-Za-z]/.test(maybeName)
       && !ignore.test(maybeName)
+      && !nonName.test(maybeName)
       && !/\b(20\d{2}|\d{1,2}:\d{2})\b/.test(maybeName)
     ) {
       pendingName = maybeName;
@@ -241,8 +283,8 @@ function findMatchedType(text, tourTypes) {
   return ordered.find((name) => haystack.includes(String(name).toLowerCase())) || null;
 }
 
-function matchTour({ text, tours, tourTypes }) {
-  const dates = parseDates(text);
+function matchTour({ text, subject, tours, tourTypes }) {
+  const dates = extractPriorityDates(text, subject);
   const times = parseTimes(text);
   const matchedPlatform = findMatchedPlatform(text, tourTypes);
   const matchedType = findMatchedType(text, tourTypes);
@@ -401,6 +443,7 @@ module.exports = async (req, res) => {
       const participants = extractParticipants(rawText);
       const match = matchTour({
         text: rawText,
+        subject,
         tours: toursRes.data || [],
         tourTypes: tourTypesRes.data || [],
       });
