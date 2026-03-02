@@ -593,8 +593,8 @@ h1 {
   font-size: 12px;
   font-weight: 800;
   color: #1a1a1a;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: #ffe600;
+  border: 1px solid #c8ae00;
 }
 
 .tour-indicator.accepted {
