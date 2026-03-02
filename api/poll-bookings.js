@@ -277,6 +277,8 @@ module.exports = async (req, res) => {
   try {
     const expectedToken = process.env.POLL_BOOKINGS_TOKEN;
     const providedToken = req.query?.token || req.headers["x-cron-token"] || req.headers.authorization?.replace(/^Bearer\s+/i, "");
+    const dryRun = String(req.query?.dry_run || req.body?.dry_run || "").toLowerCase() === "1"
+      || String(req.query?.dry_run || req.body?.dry_run || "").toLowerCase() === "true";
     if (!expectedToken || providedToken !== expectedToken) {
       return json(res, 401, { ok: false, error: "Unauthorized" });
     }
@@ -334,7 +336,7 @@ module.exports = async (req, res) => {
       );
       const gmailMessageId = headers.get("message-id") || fullMessage.data.id;
       if (knownMessages.has(gmailMessageId) && knownMessages.get(gmailMessageId) === "imported") {
-        await markMessageRead(gmail, fullMessage.data.id);
+        if (!dryRun) await markMessageRead(gmail, fullMessage.data.id);
         continue;
       }
 
@@ -379,17 +381,26 @@ module.exports = async (req, res) => {
             group_size: participant.group_size,
             platform_name: matchedPlatformName,
           }));
-          const { error: insertError } = await supabase.from("participants").insert(rows);
-          if (insertError) {
-            status = "error";
-            errorMessage = insertError.message;
-          } else {
+          if (dryRun) {
             status = "imported";
             importedParticipants = rows.map((row) => ({
               name: row.name,
               group_size: row.group_size,
               platform_name: row.platform_name,
             }));
+          } else {
+            const { error: insertError } = await supabase.from("participants").insert(rows);
+            if (insertError) {
+              status = "error";
+              errorMessage = insertError.message;
+            } else {
+              status = "imported";
+              importedParticipants = rows.map((row) => ({
+                name: row.name,
+                group_size: row.group_size,
+                platform_name: row.platform_name,
+              }));
+            }
           }
         }
       } catch (error) {
@@ -412,25 +423,49 @@ module.exports = async (req, res) => {
         processed_at: new Date().toISOString(),
       };
 
-      const { error: emailInsertError } = await supabase
-        .from("incoming_booking_emails")
-        .upsert(payload, { onConflict: "gmail_message_id" });
-      if (emailInsertError) {
-        status = "error";
-        errors += 1;
-        details.push({ subject, status, error: emailInsertError.message });
-      } else {
+      if (dryRun) {
         if (status === "imported") imported += 1;
         else if (status === "ignored") ignored += 1;
         else errors += 1;
-        details.push({ subject, status, error: errorMessage });
+        details.push({
+          subject,
+          status,
+          error: errorMessage,
+          matched_tour_id: matchedTourId,
+          matched_platform_name: matchedPlatformName,
+          participants: importedParticipants.length ? importedParticipants : participants,
+          parsed_dates: match.dates,
+          parsed_times: match.times,
+        });
+      } else {
+        const { error: emailInsertError } = await supabase
+          .from("incoming_booking_emails")
+          .upsert(payload, { onConflict: "gmail_message_id" });
+        if (emailInsertError) {
+          status = "error";
+          errors += 1;
+          details.push({ subject, status, error: emailInsertError.message });
+        } else {
+          if (status === "imported") imported += 1;
+          else if (status === "ignored") ignored += 1;
+          else errors += 1;
+          details.push({
+            subject,
+            status,
+            error: errorMessage,
+            matched_tour_id: matchedTourId,
+            matched_platform_name: matchedPlatformName,
+            participants: importedParticipants,
+          });
+        }
       }
 
-      await markMessageRead(gmail, fullMessage.data.id);
+      if (!dryRun) await markMessageRead(gmail, fullMessage.data.id);
     }
 
     return json(res, 200, {
       ok: true,
+      dry_run: dryRun,
       checked: messages.length,
       imported,
       ignored,
