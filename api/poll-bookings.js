@@ -204,6 +204,139 @@ function parseHeaderDate(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
+function parseJsonSafely(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function extractTextFromResponsePayload(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+
+  const contentTexts = [];
+  for (const item of payload.output || []) {
+    for (const content of item.content || []) {
+      if (content.type === "output_text" && typeof content.text === "string") {
+        contentTexts.push(content.text);
+      }
+      if (content.type === "text" && typeof content.text === "string") {
+        contentTexts.push(content.text);
+      }
+    }
+  }
+  return contentTexts.join("\n").trim();
+}
+
+async function extractWithLLM({ subject, rawText }) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.OPENAI_MODEL || "gpt-5.2";
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY");
+  }
+
+  const schema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      platform_name: { type: ["string", "null"] },
+      tour_name: { type: ["string", "null"] },
+      date: { type: ["string", "null"] },
+      start_time: { type: ["string", "null"] },
+      end_time: { type: ["string", "null"] },
+      booking_name: { type: ["string", "null"] },
+      participants: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            name: { type: ["string", "null"] },
+            group_size: { type: "integer" },
+          },
+          required: ["name", "group_size"],
+        },
+      },
+      confidence_notes: { type: ["string", "null"] },
+    },
+    required: [
+      "platform_name",
+      "tour_name",
+      "date",
+      "start_time",
+      "end_time",
+      "booking_name",
+      "participants",
+      "confidence_notes",
+    ],
+  };
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "Extract booking information from a forwarded reservation email. " +
+                "Return JSON only. Prefer the booked experience date/time over email sent date, cancellation date, or policy dates. " +
+                "If a value is missing, return null. If only one booking contact exists and the total guest count is clear, " +
+                "you may use that person's name with the detected group size.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `Subject: ${subject}\n\nEmail body:\n${rawText}`,
+            },
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "booking_email_extraction",
+          strict: true,
+          schema,
+        },
+      },
+    }),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `OpenAI error ${response.status}`);
+  }
+
+  const jsonText = extractTextFromResponsePayload(payload);
+  const parsed = parseJsonSafely(jsonText);
+  if (!parsed) {
+    throw new Error("OpenAI did not return valid JSON");
+  }
+
+  return {
+    model,
+    parsed,
+    raw: payload,
+  };
+}
+
 function extractParticipants(text) {
   const lines = normalizeLines(text);
   const ignore = /booking|reservation|confirm|voucher|tour|date|time|platform|payment|status|guide|ref|reference|total|guest details/i;
@@ -373,6 +506,8 @@ module.exports = async (req, res) => {
     const providedToken = req.query?.token || req.headers["x-cron-token"] || req.headers.authorization?.replace(/^Bearer\s+/i, "");
     const dryRun = String(req.query?.dry_run || req.body?.dry_run || "").toLowerCase() === "1"
       || String(req.query?.dry_run || req.body?.dry_run || "").toLowerCase() === "true";
+    const useLlm = String(req.query?.use_llm || req.body?.use_llm || "").toLowerCase() === "1"
+      || String(req.query?.use_llm || req.body?.use_llm || "").toLowerCase() === "true";
     if (!expectedToken || providedToken !== expectedToken) {
       return json(res, 401, { ok: false, error: "Unauthorized" });
     }
@@ -441,6 +576,14 @@ module.exports = async (req, res) => {
       const rawText = buildMessageText(subject, parts);
 
       const participants = extractParticipants(rawText);
+      let llmExtraction = null;
+      if (useLlm) {
+        try {
+          llmExtraction = await extractWithLLM({ subject, rawText });
+        } catch (error) {
+          llmExtraction = { error: error.message };
+        }
+      }
       const match = matchTour({
         text: rawText,
         subject,
@@ -534,6 +677,11 @@ module.exports = async (req, res) => {
           parsed_dates: match.dates,
           parsed_times: match.times,
           raw_text_preview: rawText.slice(0, 1200),
+          llm_extraction: llmExtraction ? {
+            model: llmExtraction.model,
+            parsed: llmExtraction.parsed,
+            error: llmExtraction.error || null,
+          } : null,
         });
       } else {
         const { error: emailInsertError } = await supabase
