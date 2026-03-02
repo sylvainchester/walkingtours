@@ -233,6 +233,73 @@ function extractTextFromResponsePayload(payload) {
   return contentTexts.join("\n").trim();
 }
 
+function normalizeTimeValue(value) {
+  if (!value) return null;
+  const match = String(value).trim().match(/^(\d{1,2}):(\d{2})(?:\s*(am|pm))?$/i);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridian = (match[3] || "").toLowerCase();
+  if (meridian === "pm" && hour < 12) hour += 12;
+  if (meridian === "am" && hour === 12) hour = 0;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function matchTourFromLLM(extraction, tours) {
+  if (!extraction || !Array.isArray(tours)) {
+    return { matchedTour: null, ambiguityCount: 0 };
+  }
+
+  let candidates = [...tours];
+  const matchedPlatform = String(extraction.platform_name || "").trim() || null;
+  const matchedType = String(extraction.tour_name || "").trim() || null;
+  const normalizedDate = String(extraction.date || "").trim() || null;
+  const normalizedTime = normalizeTimeValue(extraction.start_time);
+
+  if (matchedType) {
+    const byType = candidates.filter(
+      (tour) => String(tour.type || "").trim().toLowerCase() === matchedType.toLowerCase()
+    );
+    if (byType.length) candidates = byType;
+  }
+  if (normalizedDate) {
+    const byDate = candidates.filter((tour) => tour.date === normalizedDate);
+    if (byDate.length) candidates = byDate;
+  }
+  if (normalizedTime) {
+    const byTime = candidates.filter((tour) => String(tour.start_time || "").slice(0, 5) === normalizedTime);
+    if (byTime.length) candidates = byTime;
+  }
+  if (matchedPlatform) {
+    const byPlatform = candidates.filter((tour) => {
+      const name = String(tour.platform?.name || "").trim();
+      return name && name.toLowerCase() === matchedPlatform.toLowerCase();
+    });
+    if (byPlatform.length) candidates = byPlatform;
+  }
+
+  if (candidates.length !== 1) {
+    return {
+      matchedTour: null,
+      matchedPlatform,
+      matchedType,
+      dates: normalizedDate ? [normalizedDate] : [],
+      times: normalizedTime ? [normalizedTime] : [],
+      ambiguityCount: candidates.length,
+    };
+  }
+
+  return {
+    matchedTour: candidates[0],
+    matchedPlatform: matchedPlatform || String(candidates[0].platform?.name || "").trim() || null,
+    matchedType,
+    dates: normalizedDate ? [normalizedDate] : [],
+    times: normalizedTime ? [normalizedTime] : [],
+    ambiguityCount: 1,
+  };
+}
+
 async function extractWithLLM({ subject, rawText }) {
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL || "gpt-5.2";
@@ -584,12 +651,24 @@ module.exports = async (req, res) => {
           llmExtraction = { error: error.message };
         }
       }
-      const match = matchTour({
-        text: rawText,
-        subject,
-        tours: toursRes.data || [],
-        tourTypes: tourTypesRes.data || [],
-      });
+      const parsedLlm = llmExtraction?.parsed || null;
+      const extractedParticipants = parsedLlm?.participants
+        ?.filter((participant) => participant && participant.group_size > 0)
+        .map((participant) => ({
+          name: String(participant.name || parsedLlm.booking_name || "").trim(),
+          group_size: Number(participant.group_size),
+        }))
+        .filter((participant) => participant.name)
+        || [];
+      const effectiveParticipants = useLlm && extractedParticipants.length ? extractedParticipants : participants;
+      const match = useLlm && parsedLlm
+        ? matchTourFromLLM(parsedLlm, toursRes.data || [])
+        : matchTour({
+            text: rawText,
+            subject,
+            tours: toursRes.data || [],
+            tourTypes: tourTypesRes.data || [],
+          });
 
       let status = "ignored";
       let errorMessage = null;
@@ -607,13 +686,13 @@ module.exports = async (req, res) => {
           status = "ignored";
           matchedTourId = match.matchedTour.id;
           errorMessage = "No platform matched from email";
-        } else if (!participants.length) {
+        } else if (!effectiveParticipants.length) {
           status = "ignored";
           matchedTourId = match.matchedTour.id;
           errorMessage = "No participants detected";
         } else {
           matchedTourId = match.matchedTour.id;
-          const rows = participants.map((participant) => ({
+          const rows = effectiveParticipants.map((participant) => ({
             tour_id: match.matchedTour.id,
             name: participant.name,
             group_size: participant.group_size,
@@ -673,7 +752,7 @@ module.exports = async (req, res) => {
           error: errorMessage,
           matched_tour_id: matchedTourId,
           matched_platform_name: matchedPlatformName,
-          participants: importedParticipants.length ? importedParticipants : participants,
+          participants: importedParticipants.length ? importedParticipants : effectiveParticipants,
           parsed_dates: match.dates,
           parsed_times: match.times,
           raw_text_preview: rawText.slice(0, 1200),
