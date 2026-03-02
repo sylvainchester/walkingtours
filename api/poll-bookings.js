@@ -107,6 +107,7 @@ function parseTimes(text) {
 
 function parseDates(text) {
   const results = new Set();
+  const currentYear = new Date().getFullYear();
   const monthMap = {
     jan: 1, january: 1,
     feb: 2, february: 2,
@@ -136,7 +137,15 @@ function parseDates(text) {
   for (const match of text.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\s*(20\d{2})?\b/gi)) {
     const day = Number(match[1]);
     const month = monthMap[(match[2] || "").toLowerCase()];
-    const year = Number(match[3] || new Date().getFullYear());
+    const year = Number(match[3] || currentYear);
+    if (day >= 1 && day <= 31 && month) {
+      results.add(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+    }
+  }
+  for (const match of text.matchAll(/\b([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(20\d{2}))?\b/gi)) {
+    const month = monthMap[(match[1] || "").toLowerCase()];
+    const day = Number(match[2]);
+    const year = Number(match[3] || currentYear);
     if (day >= 1 && day <= 31 && month) {
       results.add(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
     }
