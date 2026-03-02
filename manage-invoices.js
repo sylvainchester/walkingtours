@@ -129,6 +129,42 @@ async function loadInvoices() {
       window.open(urlData.signedUrl, "_blank", "noopener,noreferrer");
     });
     row.appendChild(openBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "ghost danger";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm("Delete this invoice?")) return;
+      const isLocalHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+      const apiUrl = isLocalHost
+        ? "https://walkingtours.vercel.app/api/delete-invoice"
+        : "/api/delete-invoice";
+      const { data: authData } = await supabase.auth.getSession();
+      const accessToken = authData?.session?.access_token;
+      if (!accessToken) {
+        setStatus("Auth session missing.");
+        return;
+      }
+      setStatus("Deleting invoice...");
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ invoice_id: invoice.id }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) {
+        setStatus(result?.error || "Invoice deletion failed.");
+        return;
+      }
+      setStatus("Invoice deleted.");
+      await loadInvoices();
+    });
+    row.appendChild(deleteBtn);
+
     invoiceList.appendChild(row);
   });
 }

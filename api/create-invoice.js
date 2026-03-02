@@ -169,7 +169,7 @@ module.exports = async (req, res) => {
         .in("guide_id", guideIds),
       supabase
         .from("guide_profiles")
-        .select("id,first_name,last_name")
+        .select("id,first_name,last_name,account_name,account_number,sort_code")
         .in("id", guideIds),
     ]);
 
@@ -241,15 +241,31 @@ module.exports = async (req, res) => {
 
     const templatePath = path.join(process.cwd(), "invoice-summary.html");
     const template = fs.readFileSync(templatePath, "utf8");
+    let iconSrc = "";
+    const iconPath = path.join(process.cwd(), "icon.png");
+    if (fs.existsSync(iconPath)) {
+      const iconBase64 = fs.readFileSync(iconPath).toString("base64");
+      iconSrc = `data:image/png;base64,${iconBase64}`;
+    }
+    const callerProfile = profileMap.get(callerId);
+    const callerGuideName = callerProfile
+      ? `${callerProfile.first_name || ""} ${callerProfile.last_name || ""}`.trim()
+      : "Unknown guide";
     const html = replaceTokens(template, {
       invoiceNo,
-      platformName: escapeHtml(platformName),
       periodStart: escapeHtml(periodStart),
       periodEnd: escapeHtml(periodEnd),
       generatedAt: escapeHtml(generatedAt),
       rowsHtml,
       totalParticipants: totalParticipants,
       totalAmount: money(totalAmount),
+      fromGuideName: escapeHtml(callerGuideName),
+      toPlatformName: escapeHtml(platformName),
+      paymentGuideName: escapeHtml(callerGuideName || callerProfile?.account_name || ""),
+      paymentAccountNumber: escapeHtml(callerProfile?.account_number || ""),
+      paymentSortCode: escapeHtml(callerProfile?.sort_code || ""),
+      iconSrc,
+      logoStyle: iconSrc ? "" : "display:none;",
     });
 
     const pdfBuffer = await renderPdfFromHtml(html);

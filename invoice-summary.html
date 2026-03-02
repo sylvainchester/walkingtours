@@ -5,46 +5,72 @@
   <title>Invoice Summary</title>
   <style>
     @page { size: A4; margin: 16mm; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 12px; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 12px; margin: 0; }
+    .page { min-height: calc(297mm - 32mm); display: flex; flex-direction: column; }
     h1 { font-size: 22px; margin: 0 0 8px; }
     .meta { color: #555; margin-bottom: 18px; }
+    .party-block { margin-bottom: 16px; line-height: 1.5; }
+    .party-line strong { display: inline-block; width: 60px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { border-bottom: 1px solid #ddd; padding: 8px 4px; text-align: left; vertical-align: top; }
     th.right, td.right { text-align: right; }
     tfoot td { font-weight: 700; border-top: 2px solid #999; border-bottom: none; }
     .muted { color: #666; }
+    .payment-info { margin-top: 18px; line-height: 1.6; }
+    .payment-info h2 { font-size: 14px; margin: 0 0 6px; }
+    .spacer { flex: 1 1 auto; }
+    .footer-logo { margin-top: 18px; text-align: center; }
+    .footer-logo img { max-width: 120px; max-height: 60px; object-fit: contain; }
   </style>
 </head>
 <body>
-  <h1>INVOICE</h1>
-  <div class="meta">
-    Reference: {{invoiceNo}}<br />
-    Platform: {{platformName}}<br />
-    Period: {{periodStart}} to {{periodEnd}}<br />
-    Generated: {{generatedAt}}
-  </div>
+  <div class="page">
+    <h1>INVOICE</h1>
+    <div class="meta">
+      Reference: {{invoiceNo}}<br />
+      Period: {{periodStart}} to {{periodEnd}}<br />
+      Generated: {{generatedAt}}
+    </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Time</th>
-        <th>Guide</th>
-        <th>Tour</th>
-        <th class="right">Participants</th>
-        <th class="right">Net</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{rowsHtml}}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="4">Total</td>
-        <td class="right">{{totalParticipants}}</td>
-        <td class="right">{{totalAmount}}</td>
-      </tr>
-    </tfoot>
-  </table>
+    <div class="party-block">
+      <div class="party-line"><strong>From:</strong> {{fromGuideName}}</div>
+      <div class="party-line"><strong>To:</strong> {{toPlatformName}}</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Guide</th>
+          <th>Tour</th>
+          <th class="right">Participants</th>
+          <th class="right">Net</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{rowsHtml}}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4">Total</td>
+          <td class="right">{{totalParticipants}}</td>
+          <td class="right">{{totalAmount}}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="payment-info">
+      <h2>Payment information</h2>
+      <div>Guide name: {{paymentGuideName}}</div>
+      <div>Account number: {{paymentAccountNumber}}</div>
+      <div>Sort code: {{paymentSortCode}}</div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="footer-logo" style="{{logoStyle}}">
+      <img src="{{iconSrc}}" alt="Walking Tours" />
+    </div>
+  </div>
 </body>
 </html>
