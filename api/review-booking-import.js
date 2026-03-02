@@ -75,19 +75,6 @@ module.exports = async (req, res) => {
     if (!["pending_review", "error", "ignored", "received"].includes(draft.status)) {
       return json(res, 400, { ok: false, error: "Draft already reviewed" });
     }
-    if (!draft.matched_tour_id) {
-      return json(res, 400, { ok: false, error: "No matched tour for this draft" });
-    }
-
-    const { data: tour, error: tourError } = await supabase
-      .from("tours")
-      .select("id,guide_id")
-      .eq("id", draft.matched_tour_id)
-      .single();
-    if (tourError || !tour) return json(res, 404, { ok: false, error: "Matched tour not found" });
-    if (!guideIds.includes(tour.guide_id)) {
-      return json(res, 403, { ok: false, error: "Forbidden" });
-    }
 
     if (action === "reject") {
       const { error } = await supabase
@@ -100,6 +87,20 @@ module.exports = async (req, res) => {
         .eq("id", draft.id);
       if (error) return json(res, 500, { ok: false, error: error.message });
       return json(res, 200, { ok: true });
+    }
+
+    if (!draft.matched_tour_id) {
+      return json(res, 400, { ok: false, error: "No matched tour for this draft" });
+    }
+
+    const { data: tour, error: tourError } = await supabase
+      .from("tours")
+      .select("id,guide_id")
+      .eq("id", draft.matched_tour_id)
+      .single();
+    if (tourError || !tour) return json(res, 404, { ok: false, error: "Matched tour not found" });
+    if (!guideIds.includes(tour.guide_id)) {
+      return json(res, 403, { ok: false, error: "Forbidden" });
     }
 
     const participants = Array.isArray(draft.imported_participants) ? draft.imported_participants : [];
