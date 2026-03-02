@@ -79,6 +79,43 @@ function buildSharedGuideIds(rows, callerId) {
   return Array.from(ids);
 }
 
+function normalizeName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function resolveTourTypeForInvoice(tour, types, platformName) {
+  const normalizedTypeName = normalizeName(tour?.type);
+  const normalizedPlatformName = normalizeName(platformName || tour?.platform?.name);
+  if (!normalizedTypeName) return null;
+
+  const exact = (types || []).find(
+    (type) => type.guide_id === tour.guide_id && normalizeName(type.name) === normalizedTypeName
+  );
+  if (exact) return exact;
+
+  const sameName = (types || []).filter((type) => normalizeName(type.name) === normalizedTypeName);
+  if (!sameName.length) return null;
+
+  const withPlatform = sameName.find((type) =>
+    (Array.isArray(type.platforms) ? type.platforms : []).some(
+      (platform) => normalizeName(platform?.name) === normalizedPlatformName
+    )
+  );
+  return withPlatform || sameName[0];
+}
+
+function resolveInvoicePlatform(tour, type, platformName) {
+  const normalizedPlatformName = normalizeName(platformName);
+  const tourPlatform = tour?.platform;
+  if (normalizeName(tourPlatform?.name) === normalizedPlatformName) {
+    return tourPlatform;
+  }
+
+  return (Array.isArray(type?.platforms) ? type.platforms : []).find(
+    (platform) => normalizeName(platform?.name) === normalizedPlatformName
+  ) || null;
+}
+
 module.exports = async (req, res) => {
   if (req.method === "OPTIONS") return json(res, 200, { ok: true });
   if (req.method !== "POST") return json(res, 405, { ok: false, error: "Method not allowed" });
@@ -140,7 +177,6 @@ module.exports = async (req, res) => {
     if (typesRes.error) return json(res, 500, { ok: false, error: typesRes.error.message });
     if (profilesRes.error) return json(res, 500, { ok: false, error: profilesRes.error.message });
 
-    const typeMap = new Map((typesRes.data || []).map((type) => [`${type.guide_id}::${type.name}`, type]));
     const profileMap = new Map((profilesRes.data || []).map((profile) => [profile.id, profile]));
 
     const rows = [];
@@ -148,16 +184,15 @@ module.exports = async (req, res) => {
     let totalAmount = 0;
 
     for (const tour of toursRes.data || []) {
-      const type = typeMap.get(`${tour.guide_id}::${tour.type}`);
+      const type = resolveTourTypeForInvoice(tour, typesRes.data || [], platformName);
       if (!type || type.payment_type === "free") continue;
-      const matchedPlatform = (Array.isArray(type.platforms) ? type.platforms : [])
-        .find((platform) => String(platform.name || "").trim() === platformName);
+      const matchedPlatform = resolveInvoicePlatform(tour, type, platformName);
       if (!matchedPlatform || matchedPlatform.requires_invoice === false) continue;
 
       const arrivedParticipants = (tour.participants || []).filter(
         (participant) =>
           participant.attendance_status === "arrived"
-          && String(participant.platform_name || "").trim() === platformName
+          && normalizeName(participant.platform_name) === normalizeName(platformName)
       );
       const participantCount = arrivedParticipants.reduce(
         (sum, participant) => sum + Number(participant.group_size || 0),
