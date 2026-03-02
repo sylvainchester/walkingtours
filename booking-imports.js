@@ -92,23 +92,34 @@ async function reviewDraft(draftId, action) {
     return false;
   }
 
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      draft_id: draftId,
-      action,
-    }),
-  });
-  const result = await response.json();
-  if (!response.ok || !result?.ok) {
-    setStatus(result?.error || "Review action failed.");
+  setStatus(action === "reject" ? "Rejecting import..." : "Confirming import...");
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        draft_id: draftId,
+        action,
+      }),
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const result = contentType.includes("application/json")
+      ? await response.json()
+      : { ok: false, error: await response.text() };
+    if (!response.ok || !result?.ok) {
+      setStatus(result?.error || "Review action failed.");
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("review draft error", error);
+    setStatus(error?.message || "Review action failed.");
     return false;
   }
-  return true;
 }
 
 async function loadDrafts() {
@@ -196,10 +207,23 @@ async function loadDrafts() {
     rightTitle.textContent = "Email text";
     right.appendChild(rightTitle);
 
+    const toggleEmailBtn = document.createElement("button");
+    toggleEmailBtn.type = "button";
+    toggleEmailBtn.className = "ghost";
+    toggleEmailBtn.textContent = "Show email";
+    right.appendChild(toggleEmailBtn);
+
     const raw = document.createElement("pre");
     raw.className = "booking-import-raw";
     raw.textContent = draft.raw_text || "";
+    raw.hidden = true;
     right.appendChild(raw);
+
+    toggleEmailBtn.addEventListener("click", () => {
+      const shouldShow = raw.hidden;
+      raw.hidden = !shouldShow;
+      toggleEmailBtn.textContent = shouldShow ? "Hide email" : "Show email";
+    });
 
     proposed.appendChild(left);
     proposed.appendChild(right);
