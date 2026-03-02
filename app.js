@@ -1404,47 +1404,6 @@ async function showDetails(iso) {
   startInput.value = "10:30";
 
   const typeSelect = createTourTypeSelect(tourTypes[0]?.id);
-  const platformSelect = document.createElement("select");
-  platformSelect.className = "select";
-
-  const refreshPlatformSelect = () => {
-    clearChildren(platformSelect);
-    const selectedType = tourTypes.find((type) => type.id === typeSelect.value);
-    const platforms = getPlatformsForType(selectedType);
-    const needsPlatform = Boolean(selectedType);
-
-    if (!needsPlatform) {
-      const option = document.createElement("option");
-        option.value = "";
-        option.textContent = "No platform";
-      option.selected = true;
-      platformSelect.appendChild(option);
-      platformSelect.disabled = true;
-      platformSelect.style.display = "none";
-      return;
-    }
-
-    platformSelect.style.display = "";
-    if (!platforms.length) {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "No platform configured";
-      option.selected = true;
-      platformSelect.appendChild(option);
-      platformSelect.disabled = true;
-      return;
-    }
-
-    platformSelect.disabled = false;
-    platforms.forEach((platform) => {
-      const option = document.createElement("option");
-      option.value = platform.id || platform.name;
-      option.textContent = platform.name || "Platform";
-      platformSelect.appendChild(option);
-    });
-  };
-  refreshPlatformSelect();
-  typeSelect.addEventListener("change", refreshPlatformSelect);
 
   const addBtn = document.createElement("button");
   addBtn.type = "button";
@@ -1471,10 +1430,9 @@ async function showDetails(iso) {
       alert("Please select a tour type.");
       return;
     }
-    const selectedPlatform = getPlatformsForType(selectedType)
-      .find((platform) => (platform.id || platform.name) === platformSelect.value) || null;
+    const selectedPlatform = getPlatformsForType(selectedType)[0] || null;
     if (!selectedPlatform) {
-      alert("Please select a platform.");
+      alert("Please configure at least one platform for this tour type.");
       return;
     }
     const needsValidation = selectedGuide === session.user.id
@@ -1521,7 +1479,6 @@ async function showDetails(iso) {
 
   createForm.appendChild(startInput);
   createForm.appendChild(typeSelect);
-  createForm.appendChild(platformSelect);
   createForm.appendChild(guideSelect);
   createForm.appendChild(addBtn);
 
