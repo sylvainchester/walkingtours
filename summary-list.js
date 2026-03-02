@@ -281,8 +281,15 @@ function renderSummaryList() {
       (sum, participant) => sum + Number(participant.group_size || 0),
       0
     );
-    text.textContent = `${formatShortDateNoYear(tour.date)} · ${(tour.start_time || "").slice(0, 5)} · ${guideName} · ${isPrivate ? "Private tour" : tour.type} · ${participantCount} participant${participantCount === 1 ? "" : "s"}`;
+    text.textContent = `${formatShortDateNoYear(tour.date)} · ${(tour.start_time || "").slice(0, 5)} · ${guideName} · ${isPrivate ? "Private tour" : tour.type}`;
     row.appendChild(text);
+
+    if (participantCount > 0) {
+      const badge = document.createElement("div");
+      badge.className = "summary-participants-badge";
+      badge.textContent = String(participantCount);
+      row.appendChild(badge);
+    }
 
     wrapper.appendChild(row);
     summaryList.appendChild(wrapper);
