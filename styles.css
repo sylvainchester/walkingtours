@@ -105,7 +105,7 @@ h1 {
   width: 100%;
 }
 
-.nav-month #toursToggle {
+.nav-month .toggle-chip {
   margin-left: auto;
 }
 
@@ -171,17 +171,25 @@ h1 {
   margin-right: -2px;
 }
 
-#toursToggle {
+.toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--cell-border);
+  border-radius: 999px;
+  padding: 6px 12px;
   background: transparent;
-  border-color: var(--cell-border);
+  color: var(--ink);
+  font-size: 14px;
   white-space: nowrap;
-  padding-left: 14px;
-  padding-right: 14px;
+  cursor: pointer;
 }
 
-#toursToggle.only {
-  background: #f9d6e4;
-  border-color: #efbfd1;
+.toggle-chip input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #1a1a1a;
 }
 
 .ghost:focus-visible {

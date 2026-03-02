@@ -23,11 +23,14 @@
           <button id="nextMonth" class="ghost icon-btn" type="button" aria-label="Next month">
             <span class="tri right"></span>
           </button>
-          <button id="toursToggle" class="ghost" type="button">My tours</button>
+          <label class="toggle-chip" for="toursToggle">
+            <input id="toursToggle" type="checkbox" />
+            <span>Show all tours</span>
+          </label>
         </div>
         <div class="nav nav-right">
           <label class="label">
-            <span>Show availability of</span>
+            <span>Show tours and availability of</span>
             <select id="guideFilter" class="select"></select>
           </label>
         </div>

@@ -37,7 +37,7 @@ let sharedGuideProfiles = new Map();
 let shareValidationByGuideId = new Map();
 let unavailableDates = new Set();
 let selectedGuideId = null;
-let onlyMyTours = true;
+let showAllTours = false;
 let modalOpenTourId = null;
 let tourTypes = [];
 let html2pdfLoader = null;
@@ -429,16 +429,22 @@ function buildGuideFilter() {
 }
 
 function getGuideColorClass(guideId) {
-  return guideId === session?.user?.id ? "guide-color-1" : "guide-color-2";
+  return guideId === selectedGuideId ? "guide-color-1" : "guide-color-2";
 }
 
 function getAcceptedToursColorClass(tours) {
   const acceptedTours = (tours || []).filter((tour) => tour.status === "accepted");
   if (!acceptedTours.length) return "guide-color-1";
-  if (acceptedTours.some((tour) => tour.guide_id === session?.user?.id)) {
+  if (acceptedTours.some((tour) => tour.guide_id === selectedGuideId)) {
     return "guide-color-1";
   }
   return "guide-color-2";
+}
+
+function getVisibleToursForDate(iso) {
+  const allTours = toursByDate.get(iso) || [];
+  if (showAllTours) return allTours;
+  return allTours.filter((tour) => tour.guide_id === selectedGuideId);
 }
 
 async function loadAvailabilityForSelectedGuide() {
@@ -534,9 +540,7 @@ function renderCalendar() {
 
     const iso = toISO(viewYear, viewMonth, day);
     const isPastDate = iso < todayISO;
-    const tours = onlyMyTours
-      ? (toursByDate.get(iso) || []).filter((t) => t.guide_id === session?.user?.id)
-      : toursByDate.get(iso) || [];
+    const tours = getVisibleToursForDate(iso);
 
     cell.textContent = String(day);
     cell.setAttribute("aria-label", `${iso}`);
@@ -1360,7 +1364,7 @@ async function showDetails(iso) {
     return;
   }
 
-  const tours = toursByDate.get(iso) || [];
+  const tours = getVisibleToursForDate(iso);
 
   const todayISO = getTodayISO();
   const isPastDate = iso < todayISO;
@@ -1556,17 +1560,16 @@ function bindAuth() {
       selectedGuideId = event.target.value;
       await loadAvailabilityForSelectedGuide();
       renderCalendar();
+      if (selectedDate) showDetails(selectedDate);
     });
   }
 
   if (toursToggle) {
-    toursToggle.textContent = onlyMyTours ? "My tours" : "All tours";
-    toursToggle.classList.toggle("only", onlyMyTours);
-    toursToggle.addEventListener("click", () => {
-      onlyMyTours = !onlyMyTours;
-      toursToggle.textContent = onlyMyTours ? "My tours" : "All tours";
-      toursToggle.classList.toggle("only", onlyMyTours);
+    toursToggle.checked = showAllTours;
+    toursToggle.addEventListener("change", () => {
+      showAllTours = toursToggle.checked;
       renderCalendar();
+      if (selectedDate) showDetails(selectedDate);
     });
   }
 }
