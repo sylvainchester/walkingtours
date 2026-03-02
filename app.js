@@ -549,6 +549,20 @@ function renderCalendar() {
     }
     if (selectedDate === iso) cell.classList.add("selected");
 
+    const participantsTotal = tours.reduce((sum, tour) => {
+      const tourParticipants = Array.isArray(tour.participants) ? tour.participants : [];
+      return sum + tourParticipants.reduce((tourSum, participant) => {
+        return tourSum + Number(participant.group_size || 0);
+      }, 0);
+    }, 0);
+
+    if (participantsTotal > 0) {
+      const participantsIndicator = document.createElement("div");
+      participantsIndicator.className = "participants-indicator";
+      participantsIndicator.textContent = String(participantsTotal);
+      cell.appendChild(participantsIndicator);
+    }
+
     if (tours.length) {
       const indicator = document.createElement("div");
       const hasPending = tours.some((t) => t.status === "pending");

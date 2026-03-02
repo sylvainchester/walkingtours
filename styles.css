@@ -580,6 +580,23 @@ h1 {
   color: #fff;
 }
 
+.participants-indicator {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #1a1a1a;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 0, 0, 0.14);
+}
+
 .tour-indicator.accepted {
   background: #2fa14f;
 }
