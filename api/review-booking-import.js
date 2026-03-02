@@ -15,6 +15,19 @@ async function verifyUserId(req) {
   const authHeader = req.headers.authorization || "";
   if (!supabaseUrl || !anonKey || !authHeader.startsWith("Bearer ")) return null;
 
+  const accessToken = authHeader.slice("Bearer ".length).trim();
+  if (!accessToken) return null;
+
+  try {
+    const authClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await authClient.auth.getUser(accessToken);
+    if (!error && data?.user?.id) return data.user.id;
+  } catch (_error) {
+    // Fall back to direct Auth API call below.
+  }
+
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
     headers: {
       apikey: anonKey,
