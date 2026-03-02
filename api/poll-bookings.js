@@ -47,6 +47,49 @@ function normalizeLines(text) {
     .filter(Boolean);
 }
 
+function dedupeNormalizedLines(text) {
+  const seen = new Set();
+  return normalizeLines(text).filter((line) => {
+    const key = line.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function trimQuotedContent(text) {
+  const lines = String(text || "").split("\n");
+  const kept = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].replace(/\s+/g, " ").trim();
+    if (!line) {
+      kept.push("");
+      continue;
+    }
+
+    if (
+      /^-{2,}\s*forwarded message\s*-{2,}$/i.test(line)
+      || /^begin forwarded message:?$/i.test(line)
+      || /^on .+ wrote:$/i.test(line)
+    ) {
+      break;
+    }
+
+    kept.push(line);
+  }
+
+  return kept.join("\n");
+}
+
+function buildMessageText(subject, parts) {
+  const preferredBody = parts.text.length
+    ? parts.text.join("\n\n")
+    : parts.html.map(stripHtml).join("\n\n");
+  const trimmed = trimQuotedContent(preferredBody);
+  return dedupeNormalizedLines([subject, trimmed].filter(Boolean).join("\n\n")).join("\n");
+}
+
 function parseTimes(text) {
   const results = [];
   const regex = /\b(\d{1,2}):(\d{2})(?:\s*(am|pm))?\b/gi;
@@ -344,7 +387,7 @@ module.exports = async (req, res) => {
       const subject = headers.get("subject") || "";
       const fromEmail = extractEmail(headers.get("from"));
       const receivedAt = parseHeaderDate(headers.get("date"));
-      const rawText = [subject, ...parts.text, ...parts.html.map(stripHtml)].filter(Boolean).join("\n\n").trim();
+      const rawText = buildMessageText(subject, parts);
 
       const participants = extractParticipants(rawText);
       const match = matchTour({
@@ -428,6 +471,8 @@ module.exports = async (req, res) => {
         else if (status === "ignored") ignored += 1;
         else errors += 1;
         details.push({
+          gmail_message_id: gmailMessageId,
+          gmail_thread_id: fullMessage.data.threadId || null,
           subject,
           status,
           error: errorMessage,
@@ -436,6 +481,7 @@ module.exports = async (req, res) => {
           participants: importedParticipants.length ? importedParticipants : participants,
           parsed_dates: match.dates,
           parsed_times: match.times,
+          raw_text_preview: rawText.slice(0, 1200),
         });
       } else {
         const { error: emailInsertError } = await supabase
@@ -450,6 +496,7 @@ module.exports = async (req, res) => {
           else if (status === "ignored") ignored += 1;
           else errors += 1;
           details.push({
+            gmail_message_id: gmailMessageId,
             subject,
             status,
             error: errorMessage,
