@@ -4,16 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f6f1d4" />
-    <title>Manage Invoices - Walking Tours</title>
+    <title>Booking Imports - Walking Tours</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="readme-page">
     <div class="app">
       <header class="topbar">
         <div>
-          <h1>Manage Invoices</h1>
+          <h1>Booking Imports</h1>
         </div>
         <div class="avatar-menu" id="avatarMenu">
           <button id="avatarButton" class="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
@@ -27,8 +27,8 @@
             <a class="menu-item" href="index.html">Walking tours</a>
             <a class="menu-item" href="summary-list.html">Summary List</a>
             <a class="menu-item" href="booking-imports.html">Booking Imports</a>
-            <a class="menu-item" href="share.html">Share My Calendar</a>
-            <a class="menu-item" href="availability.html">My Availability</a>
+            <a class="menu-item" href="share.html" id="shareLink">Share My Calendar</a>
+            <a class="menu-item" href="availability.html" id="availabilityLink">My Availability</a>
             <a class="menu-item" href="profile.html">My Profile</a>
             <a class="menu-item" href="tour-config.html">Tour Configuration</a>
             <a class="menu-item" href="manage-invoices.html">Manage Invoices</a>
@@ -39,38 +39,13 @@
       </header>
 
       <section class="details" aria-live="polite">
-        <div class="details-title">Create Invoice</div>
-        <div class="details-content">
-          <div class="form-col compact-two-col">
-            <label class="field">
-              <span>Platform</span>
-              <select id="invoicePlatform" class="select"></select>
-            </label>
-          </div>
-          <div class="form-col compact-two-col">
-            <label class="field">
-              <span>Start date</span>
-              <input id="invoiceStart" class="input" type="date" />
-            </label>
-            <label class="field">
-              <span>End date</span>
-              <input id="invoiceEnd" class="input" type="date" />
-            </label>
-          </div>
-          <div class="form-row">
-            <button id="createInvoiceBtn" class="primary" type="button">Create invoice</button>
-          </div>
-          <div id="invoiceStatus" class="muted"></div>
-        </div>
-      </section>
-
-      <section class="details" aria-live="polite">
-        <div class="details-title">Invoices</div>
-        <div id="invoiceList" class="details-content"></div>
+        <div class="details-title">Pending Reviews</div>
+        <div id="bookingImportStatus" class="muted"></div>
+        <div id="bookingImportsList" class="details-content"></div>
       </section>
     </div>
 
-    <script type="module" src="manage-invoices.js"></script>
+    <script type="module" src="booking-imports.js"></script>
     <script src="sw-register.js"></script>
   </body>
 </html>

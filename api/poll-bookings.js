@@ -631,7 +631,10 @@ module.exports = async (req, res) => {
         (fullMessage.data.payload?.headers || []).map((header) => [header.name.toLowerCase(), header.value || ""])
       );
       const gmailMessageId = headers.get("message-id") || fullMessage.data.id;
-      if (knownMessages.has(gmailMessageId) && knownMessages.get(gmailMessageId) === "imported") {
+      if (
+        knownMessages.has(gmailMessageId)
+        && ["pending_review", "confirmed", "rejected", "ignored"].includes(knownMessages.get(gmailMessageId))
+      ) {
         if (!dryRun) await markMessageRead(gmail, fullMessage.data.id);
         continue;
       }
@@ -674,7 +677,7 @@ module.exports = async (req, res) => {
       let errorMessage = null;
       let matchedTourId = null;
       let matchedPlatformName = match.matchedPlatform || null;
-      let importedParticipants = [];
+      let proposedParticipants = [];
 
       try {
         if (!match.matchedTour) {
@@ -693,31 +696,24 @@ module.exports = async (req, res) => {
         } else {
           matchedTourId = match.matchedTour.id;
           const rows = effectiveParticipants.map((participant) => ({
-            tour_id: match.matchedTour.id,
             name: participant.name,
             group_size: participant.group_size,
             platform_name: matchedPlatformName,
           }));
           if (dryRun) {
             status = "imported";
-            importedParticipants = rows.map((row) => ({
+            proposedParticipants = rows.map((row) => ({
               name: row.name,
               group_size: row.group_size,
               platform_name: row.platform_name,
             }));
           } else {
-            const { error: insertError } = await supabase.from("participants").insert(rows);
-            if (insertError) {
-              status = "error";
-              errorMessage = insertError.message;
-            } else {
-              status = "imported";
-              importedParticipants = rows.map((row) => ({
-                name: row.name,
-                group_size: row.group_size,
-                platform_name: row.platform_name,
-              }));
-            }
+            status = "pending_review";
+            proposedParticipants = rows.map((row) => ({
+              name: row.name,
+              group_size: row.group_size,
+              platform_name: row.platform_name,
+            }));
           }
         }
       } catch (error) {
@@ -734,7 +730,8 @@ module.exports = async (req, res) => {
         raw_text: rawText,
         matched_tour_id: matchedTourId,
         matched_platform_name: matchedPlatformName,
-        imported_participants: importedParticipants,
+        imported_participants: proposedParticipants,
+        llm_extraction: llmExtraction?.parsed || {},
         status,
         error_message: errorMessage,
         processed_at: new Date().toISOString(),
@@ -752,7 +749,7 @@ module.exports = async (req, res) => {
           error: errorMessage,
           matched_tour_id: matchedTourId,
           matched_platform_name: matchedPlatformName,
-          participants: importedParticipants.length ? importedParticipants : effectiveParticipants,
+          participants: proposedParticipants.length ? proposedParticipants : effectiveParticipants,
           parsed_dates: match.dates,
           parsed_times: match.times,
           raw_text_preview: rawText.slice(0, 1200),
@@ -771,7 +768,7 @@ module.exports = async (req, res) => {
           errors += 1;
           details.push({ subject, status, error: emailInsertError.message });
         } else {
-          if (status === "imported") imported += 1;
+          if (status === "pending_review") imported += 1;
           else if (status === "ignored") ignored += 1;
           else errors += 1;
           details.push({
@@ -781,7 +778,7 @@ module.exports = async (req, res) => {
             error: errorMessage,
             matched_tour_id: matchedTourId,
             matched_platform_name: matchedPlatformName,
-            participants: importedParticipants,
+            participants: proposedParticipants,
           });
         }
       }
