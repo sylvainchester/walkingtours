@@ -277,7 +277,11 @@ function renderSummaryList() {
     row.addEventListener("click", () => openTourModal(tour));
 
     const text = document.createElement("div");
-    text.textContent = `${formatShortDateNoYear(tour.date)} · ${(tour.start_time || "").slice(0, 5)} · ${guideName} · ${isPrivate ? "Private tour" : tour.type}`;
+    const participantCount = (tour.participants || []).reduce(
+      (sum, participant) => sum + Number(participant.group_size || 0),
+      0
+    );
+    text.textContent = `${formatShortDateNoYear(tour.date)} · ${(tour.start_time || "").slice(0, 5)} · ${guideName} · ${isPrivate ? "Private tour" : tour.type} · ${participantCount} participant${participantCount === 1 ? "" : "s"}`;
     row.appendChild(text);
 
     wrapper.appendChild(row);
