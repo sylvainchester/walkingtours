@@ -102,6 +102,18 @@ function getGuideColorClass(guideId) {
   return GUIDE_COLOR_CLASSES[getGuideColorIndex(guideId)] || GUIDE_COLOR_CLASSES[0];
 }
 
+function getGuideColorValue(guideId) {
+  const colorClass = getGuideColorClass(guideId);
+  const colorMap = {
+    "guide-color-1": "#1e6f3a",
+    "guide-color-2": "#1f4f8f",
+    "guide-color-3": "#c04a8b",
+    "guide-color-4": "#6f42b5",
+    "guide-color-5": "#7a4a21",
+  };
+  return colorMap[colorClass] || colorMap["guide-color-1"];
+}
+
 function closeMenu() {
   if (!avatarDropdown || !avatarButton) return;
   avatarDropdown.classList.remove("open");
@@ -218,8 +230,13 @@ function renderBulkGuideSelect() {
     option.textContent = profile
       ? `${profile.first_name} ${profile.last_name}`
       : guideId;
+    option.className = getGuideColorClass(guideId);
+    option.style.color = getGuideColorValue(guideId);
+    option.style.fontWeight = "700";
     bulkGuideSelect.appendChild(option);
   });
+  bulkGuideSelect.style.color = getGuideColorValue(bulkGuideSelect.value);
+  bulkGuideSelect.style.fontWeight = "700";
 }
 
 function renderSummaryList() {
@@ -1005,6 +1022,7 @@ async function handleBulkSave() {
     const tour = findTourById(tourId);
     if (!tour) {
       skipped += 1;
+      messages.push(`${tourId}: tour not found`);
       continue;
     }
     const isPast = tour.date < getTodayISO();
@@ -1013,8 +1031,21 @@ async function handleBulkSave() {
     const isOwner = tour.guide_id === session.user.id;
     const isCreator = tour.created_by === session.user.id;
     const canEditTourGuide = !isPast && !isLocked && !isPrivate && (isOwner || isCreator);
-    if (!canEditTourGuide || tour.guide_id === nextGuideId) {
+    let skipReason = "";
+    if (tour.guide_id === nextGuideId) {
+      skipReason = "already assigned to this guide";
+    } else if (isPast) {
+      skipReason = "past tour";
+    } else if (isLocked) {
+      skipReason = "participants locked";
+    } else if (isPrivate) {
+      skipReason = "private tour";
+    } else if (!canEditTourGuide) {
+      skipReason = "you cannot edit this tour";
+    }
+    if (skipReason) {
       skipped += 1;
+      messages.push(`${formatShortDateNoYear(tour.date)} ${(tour.start_time || "").slice(0, 5)}: ${skipReason}`);
       continue;
     }
     try {
@@ -1033,7 +1064,7 @@ async function handleBulkSave() {
 
   await loadTours();
   const summary = `Updated ${updated} tour${updated === 1 ? "" : "s"}. Skipped ${skipped}.`;
-  setStatus(messages.length ? `${summary} ${messages[0]}` : summary);
+  setStatus(messages.length ? `${summary} ${messages.join(" | ")}` : summary);
 }
 
 async function init() {
@@ -1071,5 +1102,9 @@ tourModal?.addEventListener("click", (event) => {
   }
 });
 bulkSaveBtn?.addEventListener("click", handleBulkSave);
+bulkGuideSelect?.addEventListener("change", () => {
+  bulkGuideSelect.style.color = getGuideColorValue(bulkGuideSelect.value);
+  bulkGuideSelect.style.fontWeight = "700";
+});
 
 init();
