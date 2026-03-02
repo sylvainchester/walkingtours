@@ -192,6 +192,7 @@ async function loadTours() {
     .from("tours")
     .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
     .in("guide_id", guideIds)
+    .gte("date", getTodayISO())
     .order("date")
     .order("start_time");
   if (error) {

@@ -37,6 +37,10 @@ body.tour-config-page {
   overflow-y: auto;
 }
 
+body.summary-list-page {
+  overflow-y: auto;
+}
+
 .app {
   width: 100%;
   max-width: 980px;
@@ -56,6 +60,11 @@ body.tour-config-page {
 }
 
 .tour-config-page .app {
+  height: auto;
+  min-height: calc(var(--vh, 1vh) * 100);
+}
+
+.summary-list-page .app {
   height: auto;
   min-height: calc(var(--vh, 1vh) * 100);
 }
