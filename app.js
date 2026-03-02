@@ -43,6 +43,14 @@ let tourTypes = [];
 let html2pdfLoader = null;
 let ocrBusy = false;
 
+const GUIDE_COLOR_CLASSES = [
+  "guide-color-1",
+  "guide-color-2",
+  "guide-color-3",
+  "guide-color-4",
+  "guide-color-5",
+];
+
 async function refreshShareInviteIndicators() {
   if (!session) return;
   const { count, error } = await supabase
@@ -416,29 +424,71 @@ async function loadTourTypes() {
 function buildGuideFilter() {
   if (!guideFilter) return;
   clearChildren(guideFilter);
-  Array.from(sharedGuideIds).forEach((id) => {
+  getOrderedGuideIds().forEach((id) => {
     const profile = sharedGuideProfiles.get(id);
     const option = document.createElement("option");
     option.value = id;
     option.textContent = profile
       ? `${profile.first_name} ${profile.last_name}`
       : id;
+    option.className = getGuideColorClass(id);
+    option.style.color = getGuideColorValue(id);
+    option.style.fontWeight = "700";
     if (id === selectedGuideId) option.selected = true;
     guideFilter.appendChild(option);
   });
+  updateGuideFilterColor();
+}
+
+function getOrderedGuideIds() {
+  const ids = Array.from(sharedGuideIds);
+  return ids.sort((leftId, rightId) => {
+    if (leftId === session?.user?.id) return -1;
+    if (rightId === session?.user?.id) return 1;
+    const leftProfile = sharedGuideProfiles.get(leftId);
+    const rightProfile = sharedGuideProfiles.get(rightId);
+    const leftName = `${leftProfile?.first_name || ""} ${leftProfile?.last_name || ""}`.trim() || leftId;
+    const rightName = `${rightProfile?.first_name || ""} ${rightProfile?.last_name || ""}`.trim() || rightId;
+    return leftName.localeCompare(rightName, "en", { sensitivity: "base" });
+  });
+}
+
+function getGuideColorIndex(guideId) {
+  const orderedIds = getOrderedGuideIds();
+  const index = orderedIds.indexOf(guideId);
+  if (index === -1) return 0;
+  return Math.min(index, GUIDE_COLOR_CLASSES.length - 1);
 }
 
 function getGuideColorClass(guideId) {
-  return guideId === selectedGuideId ? "guide-color-1" : "guide-color-2";
+  return GUIDE_COLOR_CLASSES[getGuideColorIndex(guideId)] || GUIDE_COLOR_CLASSES[0];
+}
+
+function getGuideColorValue(guideId) {
+  const colorClass = getGuideColorClass(guideId);
+  const colorMap = {
+    "guide-color-1": "#1e6f3a",
+    "guide-color-2": "#1f4f8f",
+    "guide-color-3": "#c04a8b",
+    "guide-color-4": "#6f42b5",
+    "guide-color-5": "#7a4a21",
+  };
+  return colorMap[colorClass] || colorMap["guide-color-1"];
+}
+
+function updateGuideFilterColor() {
+  if (!guideFilter) return;
+  guideFilter.style.color = getGuideColorValue(selectedGuideId);
+  guideFilter.style.fontWeight = "700";
 }
 
 function getAcceptedToursColorClass(tours) {
   const acceptedTours = (tours || []).filter((tour) => tour.status === "accepted");
   if (!acceptedTours.length) return "guide-color-1";
-  if (acceptedTours.some((tour) => tour.guide_id === selectedGuideId)) {
-    return "guide-color-1";
-  }
-  return "guide-color-2";
+  const sortedAccepted = [...acceptedTours].sort(
+    (left, right) => getGuideColorIndex(left.guide_id) - getGuideColorIndex(right.guide_id)
+  );
+  return getGuideColorClass(sortedAccepted[0].guide_id);
 }
 
 function getVisibleToursForDate(iso) {
@@ -1559,6 +1609,7 @@ function bindAuth() {
     guideFilter.addEventListener("change", async (event) => {
       selectedGuideId = event.target.value;
       await loadAvailabilityForSelectedGuide();
+      updateGuideFilterColor();
       renderCalendar();
       if (selectedDate) showDetails(selectedDate);
     });
