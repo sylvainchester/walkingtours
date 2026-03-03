@@ -153,9 +153,10 @@ async function checkNewEmails() {
   }
 }
 
-async function loadDrafts() {
+async function loadDrafts(options = {}) {
+  const preserveStatus = Boolean(options.preserveStatus);
   clearChildren(bookingImportsList);
-  setStatus("");
+  if (!preserveStatus) setStatus("");
 
   const { data, error } = await supabase
     .from("incoming_booking_emails")
@@ -171,7 +172,8 @@ async function loadDrafts() {
   const drafts = (data || []).filter((draft) => {
     if (!draft.matched_tour_id) return true;
     const tour = toursById.get(draft.matched_tour_id);
-    return tour && sharedGuideIds.has(tour.guide_id);
+    if (!tour) return true;
+    return sharedGuideIds.has(tour.guide_id);
   });
 
   if (!drafts.length) {
@@ -313,8 +315,8 @@ async function init() {
   await ensurePushSubscription(supabase, session);
   await refreshShareInviteIndicators();
   await loadSharedGuides();
-  await loadToursIndex();
-  await loadDrafts();
+    await loadToursIndex();
+    await loadDrafts({ preserveStatus: true });
 }
 
 signOutBtn?.addEventListener("click", async () => {
