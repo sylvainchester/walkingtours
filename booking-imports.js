@@ -178,7 +178,7 @@ async function loadDrafts(options = {}) {
 
   const { data, error } = await supabase
     .from("incoming_booking_emails")
-    .select("id,subject,from_email,received_at,raw_text,matched_tour_id,matched_platform_name,imported_participants,llm_extraction,status,error_message,created_at")
+    .select("id,subject,from_email,received_at,raw_text,raw_html,matched_tour_id,matched_platform_name,imported_participants,llm_extraction,status,error_message,created_at")
     .eq("from_email", normalizeEmail(session?.user?.email))
     .in("status", ["pending_review", "error", "ignored"])
     .order("created_at", { ascending: false });
@@ -249,7 +249,7 @@ async function loadDrafts(options = {}) {
     right.className = "booking-import-panel";
     const rightTitle = document.createElement("div");
     rightTitle.className = "details-title";
-    rightTitle.textContent = "Email text";
+    rightTitle.textContent = "Original email";
     right.appendChild(rightTitle);
 
     const toggleEmailBtn = document.createElement("button");
@@ -258,15 +258,28 @@ async function loadDrafts(options = {}) {
     toggleEmailBtn.textContent = "Show email";
     right.appendChild(toggleEmailBtn);
 
-    const raw = document.createElement("pre");
-    raw.className = "booking-import-raw";
-    raw.textContent = draft.raw_text || "";
-    raw.hidden = true;
-    right.appendChild(raw);
+    const previewWrap = document.createElement("div");
+    previewWrap.className = "booking-import-preview-wrap";
+    previewWrap.hidden = true;
+
+    if (draft.raw_html) {
+      const previewFrame = document.createElement("iframe");
+      previewFrame.className = "booking-import-preview";
+      previewFrame.setAttribute("sandbox", "");
+      previewFrame.srcdoc = draft.raw_html;
+      previewWrap.appendChild(previewFrame);
+    } else {
+      const raw = document.createElement("pre");
+      raw.className = "booking-import-raw";
+      raw.textContent = draft.raw_text || "";
+      previewWrap.appendChild(raw);
+    }
+
+    right.appendChild(previewWrap);
 
     toggleEmailBtn.addEventListener("click", () => {
-      const shouldShow = raw.hidden;
-      raw.hidden = !shouldShow;
+      const shouldShow = previewWrap.hidden;
+      previewWrap.hidden = !shouldShow;
       toggleEmailBtn.textContent = shouldShow ? "Hide email" : "Show email";
     });
 

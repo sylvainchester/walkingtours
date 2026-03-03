@@ -155,6 +155,21 @@ h1 {
   color: #e62e2e;
 }
 
+.booking-import-preview-wrap {
+  margin-top: 10px;
+  border: 1px solid var(--cell-border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.booking-import-preview {
+  width: 100%;
+  height: 480px;
+  border: 0;
+  background: #fff;
+}
+
 .icon-btn {
   width: 30px;
   height: 30px;
@@ -704,6 +719,37 @@ h1 {
   color: #1a1a1a;
   background: #ffe600;
   border: 1px solid #c8ae00;
+}
+
+.booking-import-card {
+  display: grid;
+  gap: 10px;
+}
+
+.booking-import-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.booking-import-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--cell-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.booking-import-raw {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  max-height: 280px;
+  overflow-y: auto;
 }
 
 .day-panel {

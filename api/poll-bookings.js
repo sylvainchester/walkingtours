@@ -710,6 +710,7 @@ module.exports = async (req, res) => {
       const fromEmail = normalizeEmail(extractEmail(headers.get("from")));
       const receivedAt = parseHeaderDate(headers.get("date"));
       const rawText = buildMessageText(subject, parts);
+      const rawHtml = parts.html.join("\n\n").trim();
       const senderGuide = guideByEmail.get(fromEmail);
       const allowedGuideIds = senderGuide
         ? (sharedGuideIdsByGuideId.get(senderGuide.id) || [senderGuide.id])
@@ -812,6 +813,7 @@ module.exports = async (req, res) => {
         from_email: fromEmail || null,
         received_at: receivedAt,
         raw_text: rawText,
+        raw_html: rawHtml,
         matched_tour_id: matchedTourId,
         matched_platform_name: matchedPlatformName,
         imported_participants: proposedParticipants,
