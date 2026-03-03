@@ -275,14 +275,9 @@ async function loadDrafts(options = {}) {
     const right = document.createElement("div");
     right.className = "booking-import-panel";
     right.hidden = true;
-    const rightTitle = document.createElement("div");
-    rightTitle.className = "details-title";
-    rightTitle.textContent = "Original email";
-    right.appendChild(rightTitle);
 
     const previewWrap = document.createElement("div");
     previewWrap.className = "booking-import-preview-wrap";
-    previewWrap.hidden = true;
 
     if (draft.raw_html) {
       const previewFrame = document.createElement("iframe");
@@ -302,7 +297,6 @@ async function loadDrafts(options = {}) {
     toggleEmailBtn.addEventListener("click", () => {
       const shouldShow = right.hidden;
       right.hidden = !shouldShow;
-      previewWrap.hidden = !shouldShow;
       toggleEmailBtn.textContent = shouldShow ? "Hide email" : "Show email";
     });
 
