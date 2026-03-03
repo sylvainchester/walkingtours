@@ -277,7 +277,7 @@ async function loadDrafts(options = {}) {
 
     const right = document.createElement("div");
     right.className = "booking-import-panel";
-    right.hidden = true;
+    right.style.display = "none";
 
     if (draft.raw_html) {
       const previewFrame = document.createElement("iframe");
@@ -293,8 +293,8 @@ async function loadDrafts(options = {}) {
     }
 
     toggleEmailBtn.addEventListener("click", () => {
-      const shouldShow = right.hidden;
-      right.hidden = !shouldShow;
+      const shouldShow = right.style.display === "none";
+      right.style.display = shouldShow ? "grid" : "none";
       toggleEmailBtn.textContent = shouldShow ? "Hide email" : "Show email";
     });
 
