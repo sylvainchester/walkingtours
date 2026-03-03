@@ -5,6 +5,7 @@ import { ensurePushSubscription } from "./push.js";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const bookingImportsList = document.getElementById("bookingImportsList");
+const confirmedBookingImportsList = document.getElementById("confirmedBookingImportsList");
 const bookingImportStatus = document.getElementById("bookingImportStatus");
 const checkNewEmailsBtn = document.getElementById("checkNewEmailsBtn");
 const signOutBtn = document.getElementById("signOutBtn");
@@ -198,13 +199,14 @@ async function checkNewEmails() {
 async function loadDrafts(options = {}) {
   const preserveStatus = Boolean(options.preserveStatus);
   clearChildren(bookingImportsList);
+  clearChildren(confirmedBookingImportsList);
   if (!preserveStatus) setStatus("");
 
   const { data, error } = await supabase
     .from("incoming_booking_emails")
     .select("id,subject,from_email,received_at,raw_text,raw_html,matched_tour_id,matched_platform_name,imported_participants,llm_extraction,status,error_message,created_at")
     .eq("from_email", normalizeEmail(session?.user?.email))
-    .in("status", ["pending_review", "error", "ignored"])
+    .in("status", ["pending_review", "error", "ignored", "confirmed"])
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -212,18 +214,19 @@ async function loadDrafts(options = {}) {
     return;
   }
 
-  const drafts = (data || []).filter((draft) => {
+  const visibleRows = (data || []).filter((draft) => {
     if (!draft.matched_tour_id) return true;
     const tour = toursById.get(draft.matched_tour_id);
     if (!tour) return true;
     return sharedGuideIds.has(tour.guide_id);
   });
+  const drafts = visibleRows.filter((draft) => draft.status !== "confirmed");
+  const confirmedRows = visibleRows.filter((draft) => draft.status === "confirmed");
 
   if (!drafts.length) {
     const empty = document.createElement("div");
     empty.textContent = "No booking imports to review.";
     bookingImportsList.appendChild(empty);
-    return;
   }
 
   drafts.forEach((draft) => {
@@ -342,6 +345,36 @@ async function loadDrafts(options = {}) {
 
     card.appendChild(actions);
     bookingImportsList.appendChild(card);
+  });
+
+  if (!confirmedRows.length) {
+    const emptyConfirmed = document.createElement("div");
+    emptyConfirmed.textContent = "No confirmed imports yet.";
+    confirmedBookingImportsList.appendChild(emptyConfirmed);
+    return;
+  }
+
+  confirmedRows.forEach((draft) => {
+    const row = document.createElement("div");
+    row.className = "booking-import-confirmed";
+
+    const matchedTour = toursById.get(draft.matched_tour_id);
+    const participants = Array.isArray(draft.imported_participants) ? draft.imported_participants : [];
+    const participantsCount = participants.reduce(
+      (sum, participant) => sum + Number(participant.group_size || 0),
+      0
+    );
+
+    const line1 = document.createElement("div");
+    line1.textContent = `${formatShortDate(draft.received_at || draft.created_at)} · ${draft.subject || "Imported email"}`;
+    row.appendChild(line1);
+
+    const line2 = document.createElement("div");
+    line2.className = "muted";
+    line2.textContent = `${formatTourLabel(matchedTour)} · ${draft.matched_platform_name || draft.llm_extraction?.platform_name || "Unknown"} · ${participantsCount} participants`;
+    row.appendChild(line2);
+
+    confirmedBookingImportsList.appendChild(row);
   });
 }
 
