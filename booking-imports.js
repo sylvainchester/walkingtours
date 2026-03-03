@@ -64,11 +64,13 @@ function formatShortDate(value) {
 }
 
 async function refreshDraftsAfterImportCheck() {
+  await loadSharedGuides();
   await loadToursIndex();
   await loadDrafts({ preserveStatus: true });
 
   if (bookingImportsList?.textContent?.includes("No booking imports to review.")) {
     await sleep(1200);
+    await loadSharedGuides();
     await loadToursIndex();
     await loadDrafts({ preserveStatus: true });
   }
