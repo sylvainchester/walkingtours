@@ -41,18 +41,20 @@
       <section class="details" aria-live="polite">
         <div class="details-title">Overview</div>
         <div class="details-content">
-          <div class="readme-line">This page explains the main workflow of the app from tour setup to final lock.</div>
-          <div class="readme-line">The app is built around shared calendars, guide availability, tour creation, participant tracking and final invoicing.</div>
+          <div class="readme-line">Walking Tours is a shared planning tool for guides. It combines calendar planning, participant tracking, invoice preparation, push notifications and email booking review.</div>
+          <div class="readme-line">The main sections are: Walking Tours, Summary List, Booking Imports, Share My Calendar, My Availability, My Profile, Tour Configuration and Manage Invoices.</div>
         </div>
       </section>
 
       <section class="details" aria-live="polite">
         <div class="details-title">Tour Configuration</div>
         <div class="details-content">
-          <div class="readme-line"><strong>Tour templates:</strong> all bookable tours are created in <em>Tour Configuration</em>.</div>
-          <div class="readme-line"><strong>Pre-paid:</strong> use this when the tour is invoiced. You define ticket price and one or more platforms, each with its own commission, invoice requirement and email.</div>
-          <div class="readme-line"><strong>Free tour:</strong> use this when guests pay the guide directly. In this case no invoice is generated from the tour lock. Platforms still exist, but their value is used as the fee per participant owed to the platform.</div>
-          <div class="readme-line"><strong>Shareable / Private:</strong> shareable tour types can be used by guides sharing the same calendar. Private types still block conflicts but their details stay hidden from the other guide.</div>
+          <div class="readme-line"><strong>Tour types:</strong> all tours are based on a configured tour type.</div>
+          <div class="readme-line"><strong>Pre-paid:</strong> define ticket price and platforms. Each platform can have commission, invoice requirement and invoice email.</div>
+          <div class="readme-line"><strong>Free tour:</strong> platforms are still used, but the value becomes the fee per participant owed to the platform.</div>
+          <div class="readme-line"><strong>Platforms:</strong> only platforms defined in the tour type are valid for imports and participant assignment.</div>
+          <div class="readme-line"><strong>Shareable / Private:</strong> shareable types can be used by shared guides. Private types still block conflicts but hide details from other guides.</div>
+          <div class="readme-line"><strong>Schedule templates:</strong> recurring day/time templates can automatically create future tours until an end date.</div>
         </div>
       </section>
 
@@ -61,20 +63,21 @@
         <div class="details-content">
           <div class="readme-line"><strong>Share My Calendar:</strong> one guide can invite another by email.</div>
           <div class="readme-line"><strong>Invitation flow:</strong> the second guide receives the invitation in the Share screen and must accept it before the calendar becomes shared.</div>
-          <div class="readme-line"><strong>Shared work:</strong> once accepted, both guides can see the same calendar, coordinate bookings and follow the same tour schedule.</div>
-          <div class="readme-line"><strong>Notifications:</strong> share requests and accepted shares trigger push notifications when notifications are enabled.</div>
+          <div class="readme-line"><strong>Shared work:</strong> once accepted, guides can see the same planning space and coordinate tours.</div>
+          <div class="readme-line"><strong>Validation toggle:</strong> a shared calendar can require acceptance for tours created by the other guide, or accept them immediately with notification only.</div>
+          <div class="readme-line"><strong>Notifications:</strong> share requests, accepted shares, removals and tour events trigger push notifications.</div>
         </div>
       </section>
 
       <section class="details" aria-live="polite">
         <div class="details-title">Availability And Booking</div>
         <div class="details-content">
-          <div class="readme-line"><strong>Availability:</strong> each guide must mark available days in <em>My Availability</em>.</div>
-          <div class="readme-line"><strong>Important:</strong> if a guide is not marked available on a day, that guide will not appear in the booking list for that day.</div>
-          <div class="readme-line"><strong>Create Tour:</strong> on the main calendar, pick a day, choose a start time, select the guide and select the tour type.</div>
-          <div class="readme-line"><strong>Pending tours:</strong> if you create a tour for another guide, it is created as <em>pending</em> until that guide accepts it.</div>
-          <div class="readme-line"><strong>Accepted tours:</strong> once accepted, the tour becomes active and appears as confirmed in the calendar.</div>
+          <div class="readme-line"><strong>Walking Tours:</strong> the main page shows one month at a time with availability, tour count and participant count by day.</div>
+          <div class="readme-line"><strong>Availability:</strong> guides are available by default and can mark days unavailable in <em>My Availability</em>.</div>
+          <div class="readme-line"><strong>Create Tour:</strong> pick a day, time, guide and tour type. End time defaults automatically.</div>
+          <div class="readme-line"><strong>Pending tours:</strong> if validation is required, a tour created for another guide stays pending until accepted.</div>
           <div class="readme-line"><strong>Conflict protection:</strong> the app blocks overlapping tours for the same guide.</div>
+          <div class="readme-line"><strong>Summary List:</strong> shows all future tours in chronological order and allows bulk guide reassignment.</div>
         </div>
       </section>
 
@@ -85,8 +88,29 @@
           <div class="readme-line"><strong>Attendance status:</strong> each participant must be marked as <em>arrived</em> or <em>no-show</em>.</div>
           <div class="readme-line"><strong>Lock participants:</strong> locking is final. After lock, participants can no longer be changed.</div>
           <div class="readme-line"><strong>Validation before lock:</strong> all participants must have a status, and at least one participant must be marked as arrived.</div>
-          <div class="readme-line"><strong>Pre-paid tours:</strong> locking only freezes the participant list. Invoices are then created later from <em>Manage Invoices</em> by choosing a platform and a period.</div>
-          <div class="readme-line"><strong>Free tours:</strong> after lock, the guide can enter the amount received and the app shows the amount due to the platform based on the fee per participant.</div>
+          <div class="readme-line"><strong>Pre-paid tours:</strong> lock freezes the list. Invoices are created later from <em>Manage Invoices</em>.</div>
+          <div class="readme-line"><strong>Free tours:</strong> after lock, the guide can enter the amount received and the app shows the platform amount due.</div>
+        </div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Booking Imports</div>
+        <div class="details-content">
+          <div class="readme-line"><strong>Manual check:</strong> the guide forwards booking emails, then uses <em>Check new emails</em> in <em>Booking Imports</em>.</div>
+          <div class="readme-line"><strong>Email recognition:</strong> the app links imports to the guide email, plus optional booking import alias emails from <em>My Profile</em>.</div>
+          <div class="readme-line"><strong>Matching:</strong> imports are matched only against tours belonging to that guide or to guides sharing the same calendar.</div>
+          <div class="readme-line"><strong>Review flow:</strong> each import is reviewed before insertion. Rejected imports disappear. Confirmed imports stay visible in a green history list.</div>
+          <div class="readme-line"><strong>Original email:</strong> the raw email can be expanded to compare the proposed import with the source.</div>
+        </div>
+      </section>
+
+      <section class="details" aria-live="polite">
+        <div class="details-title">Profile And Invoices</div>
+        <div class="details-content">
+          <div class="readme-line"><strong>My Profile:</strong> stores guide identity, bank details and booking import alias emails.</div>
+          <div class="readme-line"><strong>Manage Invoices:</strong> creates one invoice by platform and date range using locked tours only.</div>
+          <div class="readme-line"><strong>Invoice scope:</strong> one invoice can include tours from all guides sharing the same calendar.</div>
+          <div class="readme-line"><strong>History:</strong> invoices are listed with open and delete actions.</div>
         </div>
       </section>
     </div>
