@@ -10,6 +10,10 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 async function verifyUserId(req) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
@@ -584,6 +588,17 @@ async function getSupabaseAdmin() {
   });
 }
 
+function buildSharedGuideIds(rows, callerId) {
+  const ids = new Set([callerId]);
+  (rows || []).forEach((row) => {
+    if (row.guide_id === callerId || row.shared_with_id === callerId) {
+      if (row.guide_id) ids.add(row.guide_id);
+      if (row.shared_with_id) ids.add(row.shared_with_id);
+    }
+  });
+  return Array.from(ids);
+}
+
 async function markMessageRead(gmail, messageId) {
   await gmail.users.messages.modify({
     userId: "me",
@@ -615,7 +630,7 @@ module.exports = async (req, res) => {
     const supabase = await getSupabaseAdmin();
     const nowIso = new Date().toISOString().slice(0, 10);
 
-    const [messagesRes, toursRes, tourTypesRes, existingEmailsRes] = await Promise.all([
+    const [messagesRes, toursRes, tourTypesRes, existingEmailsRes, profilesRes, shareRowsRes] = await Promise.all([
       gmail.users.messages.list({
         userId: "me",
         q: "in:inbox is:unread newer_than:30d",
@@ -636,14 +651,33 @@ module.exports = async (req, res) => {
         .select("gmail_message_id,status")
         .order("created_at", { ascending: false })
         .limit(500),
+      supabase
+        .from("guide_profiles")
+        .select("id,email"),
+      supabase
+        .from("guide_shares")
+        .select("guide_id,shared_with_id"),
     ]);
 
     if (toursRes.error) throw new Error(toursRes.error.message);
     if (tourTypesRes.error) throw new Error(tourTypesRes.error.message);
     if (existingEmailsRes.error) throw new Error(existingEmailsRes.error.message);
+    if (profilesRes.error) throw new Error(profilesRes.error.message);
+    if (shareRowsRes.error) throw new Error(shareRowsRes.error.message);
 
     const knownMessages = new Map(
       (existingEmailsRes.data || []).map((row) => [row.gmail_message_id, row.status])
+    );
+    const guideByEmail = new Map(
+      (profilesRes.data || [])
+        .filter((profile) => normalizeEmail(profile.email))
+        .map((profile) => [normalizeEmail(profile.email), profile])
+    );
+    const sharedGuideIdsByGuideId = new Map(
+      (profilesRes.data || []).map((profile) => [
+        profile.id,
+        buildSharedGuideIds(shareRowsRes.data || [], profile.id),
+      ])
     );
 
     const messages = messagesRes.data.messages || [];
@@ -673,9 +707,15 @@ module.exports = async (req, res) => {
 
       const parts = collectBodyParts(fullMessage.data.payload);
       const subject = headers.get("subject") || "";
-      const fromEmail = extractEmail(headers.get("from"));
+      const fromEmail = normalizeEmail(extractEmail(headers.get("from")));
       const receivedAt = parseHeaderDate(headers.get("date"));
       const rawText = buildMessageText(subject, parts);
+      const senderGuide = guideByEmail.get(fromEmail);
+      const allowedGuideIds = senderGuide
+        ? (sharedGuideIdsByGuideId.get(senderGuide.id) || [senderGuide.id])
+        : [];
+      const candidateTours = (toursRes.data || []).filter((tour) => allowedGuideIds.includes(tour.guide_id));
+      const candidateTourTypes = (tourTypesRes.data || []).filter((tourType) => allowedGuideIds.includes(tourType.guide_id));
 
       const participants = extractParticipants(rawText);
       let llmExtraction = null;
@@ -696,14 +736,23 @@ module.exports = async (req, res) => {
         .filter((participant) => participant.name)
         || [];
       const effectiveParticipants = useLlm && extractedParticipants.length ? extractedParticipants : participants;
-      const match = useLlm && parsedLlm
-        ? matchTourFromLLM(parsedLlm, toursRes.data || [])
-        : matchTour({
-            text: rawText,
-            subject,
-            tours: toursRes.data || [],
-            tourTypes: tourTypesRes.data || [],
-          });
+      const match = senderGuide
+        ? (useLlm && parsedLlm
+            ? matchTourFromLLM(parsedLlm, candidateTours)
+            : matchTour({
+                text: rawText,
+                subject,
+                tours: candidateTours,
+                tourTypes: candidateTourTypes,
+              }))
+        : {
+            matchedTour: null,
+            matchedPlatform: null,
+            matchedType: null,
+            dates: [],
+            times: [],
+            ambiguityCount: 0,
+          };
 
       let status = "ignored";
       let errorMessage = null;
@@ -712,7 +761,10 @@ module.exports = async (req, res) => {
       let proposedParticipants = [];
 
       try {
-        if (!match.matchedTour) {
+        if (!senderGuide) {
+          status = "ignored";
+          errorMessage = "Sender email is not a known guide";
+        } else if (!match.matchedTour) {
           status = "ignored";
           errorMessage = match.ambiguityCount > 1
             ? `Ambiguous tour match (${match.ambiguityCount} candidates)`
@@ -757,7 +809,7 @@ module.exports = async (req, res) => {
         gmail_message_id: gmailMessageId,
         gmail_thread_id: fullMessage.data.threadId || null,
         subject,
-        from_email: fromEmail,
+        from_email: fromEmail || null,
         received_at: receivedAt,
         raw_text: rawText,
         matched_tour_id: matchedTourId,

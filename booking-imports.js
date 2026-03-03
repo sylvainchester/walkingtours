@@ -25,6 +25,10 @@ function clearChildren(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -147,10 +151,14 @@ async function checkNewEmails() {
   try {
     const iframe = document.createElement("iframe");
     iframe.hidden = true;
+    const loaded = new Promise((resolve) => {
+      iframe.addEventListener("load", resolve, { once: true });
+    });
     iframe.src = apiUrl;
     document.body.appendChild(iframe);
 
-    await sleep(1500);
+    await loaded;
+    await sleep(300);
     iframe.remove();
 
     setStatus("Email check finished. Reloading imports...");
@@ -171,6 +179,7 @@ async function loadDrafts(options = {}) {
   const { data, error } = await supabase
     .from("incoming_booking_emails")
     .select("id,subject,from_email,received_at,raw_text,matched_tour_id,matched_platform_name,imported_participants,llm_extraction,status,error_message,created_at")
+    .eq("from_email", normalizeEmail(session?.user?.email))
     .in("status", ["pending_review", "error", "ignored"])
     .order("created_at", { ascending: false });
 
