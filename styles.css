@@ -41,6 +41,10 @@ body.summary-list-page {
   overflow-y: auto;
 }
 
+body.booking-imports-page {
+  overflow-y: auto;
+}
+
 .app {
   width: 100%;
   max-width: 980px;
@@ -67,6 +71,13 @@ body.summary-list-page {
 .summary-list-page .app {
   height: auto;
   min-height: calc(var(--vh, 1vh) * 100);
+}
+
+.booking-imports-page .app {
+  max-width: 1160px;
+  height: auto;
+  min-height: calc(var(--vh, 1vh) * 100);
+  padding: 16px 12px 24px;
 }
 
 .main-page {
@@ -165,7 +176,7 @@ h1 {
 
 .booking-import-preview {
   width: 100%;
-  height: 480px;
+  height: 560px;
   border: 0;
   background: #fff;
 }
@@ -726,6 +737,17 @@ h1 {
   gap: 10px;
 }
 
+.booking-imports-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.booking-imports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .booking-import-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -735,7 +757,7 @@ h1 {
 .booking-import-panel {
   display: grid;
   gap: 8px;
-  padding: 10px;
+  padding: 8px;
   border: 1px solid var(--cell-border);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.5);
