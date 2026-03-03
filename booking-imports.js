@@ -6,6 +6,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const bookingImportsList = document.getElementById("bookingImportsList");
 const bookingImportStatus = document.getElementById("bookingImportStatus");
+const checkNewEmailsBtn = document.getElementById("checkNewEmailsBtn");
 const signOutBtn = document.getElementById("signOutBtn");
 const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
@@ -119,6 +120,50 @@ async function reviewDraft(draftId, action) {
     console.error("review draft error", error);
     setStatus(error?.message || "Review action failed.");
     return false;
+  }
+}
+
+async function checkNewEmails() {
+  const isLocalHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+  const apiUrl = isLocalHost
+    ? "https://walkingtours.vercel.app/api/poll-bookings"
+    : "/api/poll-bookings";
+  const { data: authData } = await supabase.auth.getSession();
+  const accessToken = authData?.session?.access_token;
+  if (!accessToken) {
+    setStatus("Auth session missing.");
+    return;
+  }
+
+  checkNewEmailsBtn.disabled = true;
+  setStatus("Checking new emails...");
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ use_llm: true }),
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const result = contentType.includes("application/json")
+      ? await response.json()
+      : { ok: false, error: await response.text() };
+    if (!response.ok || !result?.ok) {
+      setStatus(result?.error || "Check new emails failed.");
+      return;
+    }
+
+    setStatus(`Checked ${result.checked || 0} emails. ${result.imported || 0} import(s) ready for review.`);
+    await loadToursIndex();
+    await loadDrafts();
+  } catch (error) {
+    console.error("check new emails error", error);
+    setStatus(error?.message || "Check new emails failed.");
+  } finally {
+    checkNewEmailsBtn.disabled = false;
   }
 }
 
@@ -303,5 +348,7 @@ document.addEventListener("click", (event) => {
   if (avatarDropdown.contains(event.target) || avatarButton.contains(event.target)) return;
   closeMenu();
 });
+
+checkNewEmailsBtn?.addEventListener("click", checkNewEmails);
 
 init();

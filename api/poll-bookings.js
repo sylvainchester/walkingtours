@@ -10,6 +10,36 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+async function verifyUserId(req) {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  const authHeader = req.headers.authorization || "";
+  if (!supabaseUrl || !anonKey || !authHeader.startsWith("Bearer ")) return null;
+
+  const accessToken = authHeader.slice("Bearer ".length).trim();
+  if (!accessToken) return null;
+
+  try {
+    const authClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await authClient.auth.getUser(accessToken);
+    if (!error && data?.user?.id) return data.user.id;
+  } catch (_error) {
+    // Fall back to direct Auth API call below.
+  }
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: anonKey,
+      Authorization: authHeader,
+    },
+  });
+  if (!response.ok) return null;
+  const user = await response.json();
+  return user?.id || null;
+}
+
 function decodeBase64Url(value) {
   if (!value) return "";
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -575,7 +605,9 @@ module.exports = async (req, res) => {
       || String(req.query?.dry_run || req.body?.dry_run || "").toLowerCase() === "true";
     const useLlm = String(req.query?.use_llm || req.body?.use_llm || "").toLowerCase() === "1"
       || String(req.query?.use_llm || req.body?.use_llm || "").toLowerCase() === "true";
-    if (!expectedToken || providedToken !== expectedToken) {
+    const tokenAuthorized = Boolean(expectedToken) && providedToken === expectedToken;
+    const userId = tokenAuthorized ? null : await verifyUserId(req);
+    if (!tokenAuthorized && !userId) {
       return json(res, 401, { ok: false, error: "Unauthorized" });
     }
 
