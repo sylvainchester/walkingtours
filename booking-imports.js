@@ -29,6 +29,17 @@ function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+async function refreshDraftsAfterImportCheck() {
+  await loadToursIndex();
+  await loadDrafts({ preserveStatus: true });
+
+  if (bookingImportsList?.textContent?.includes("No booking imports to review.")) {
+    await sleep(1200);
+    await loadToursIndex();
+    await loadDrafts({ preserveStatus: true });
+  }
+}
+
 function closeMenu() {
   avatarDropdown?.classList.remove("open");
   avatarButton?.setAttribute("aria-expanded", "false");
@@ -143,8 +154,7 @@ async function checkNewEmails() {
     iframe.remove();
 
     setStatus("Email check finished. Reloading imports...");
-    await loadToursIndex();
-    await loadDrafts({ preserveStatus: true });
+    await refreshDraftsAfterImportCheck();
   } catch (error) {
     console.error("check new emails error", error);
     setStatus(error?.message || "Check new emails failed.");
@@ -218,6 +228,11 @@ async function loadDrafts(options = {}) {
     leftTitle.textContent = "Proposed import";
     left.appendChild(leftTitle);
 
+    const leftPlatformLine = document.createElement("div");
+    leftPlatformLine.className = "readme-line";
+    leftPlatformLine.textContent = `Platform: ${draft.matched_platform_name || draft.llm_extraction?.platform_name || "Unknown"}`;
+    left.appendChild(leftPlatformLine);
+
     const participants = Array.isArray(draft.imported_participants) ? draft.imported_participants : [];
     const participantsText = document.createElement("div");
     participantsText.className = "readme-line";
@@ -225,13 +240,6 @@ async function loadDrafts(options = {}) {
       ? participants.map((participant) => `${participant.name} (${participant.group_size})`).join(" · ")
       : "No participants proposed.";
     left.appendChild(participantsText);
-
-    if (draft.llm_extraction?.confidence_notes) {
-      const notes = document.createElement("div");
-      notes.className = "muted";
-      notes.textContent = draft.llm_extraction.confidence_notes;
-      left.appendChild(notes);
-    }
 
     const right = document.createElement("div");
     right.className = "booking-import-panel";
