@@ -134,20 +134,15 @@ async function checkNewEmails() {
   setStatus("Checking new emails...");
 
   try {
-    const response = await fetch(apiUrl, {
-      method: "GET",
-    });
-    const contentType = response.headers.get("content-type") || "";
-    const result = contentType.includes("application/json")
-      ? await response.json()
-      : { ok: false, error: await response.text() };
-    if (!response.ok || !result?.ok) {
-      setStatus(result?.error || "Check new emails failed.");
-      return;
-    }
+    const iframe = document.createElement("iframe");
+    iframe.hidden = true;
+    iframe.src = apiUrl;
+    document.body.appendChild(iframe);
 
-    setStatus(`Checked ${result.checked || 0} emails. ${result.imported || 0} import(s) ready for review.`);
-    await sleep(500);
+    await sleep(1500);
+    iframe.remove();
+
+    setStatus("Email check finished. Reloading imports...");
     await loadToursIndex();
     await loadDrafts({ preserveStatus: true });
   } catch (error) {
