@@ -124,28 +124,14 @@ async function reviewDraft(draftId, action) {
 }
 
 async function checkNewEmails() {
-  const isLocalHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
-  const apiUrl = isLocalHost
-    ? "https://walkingtours.vercel.app/api/poll-bookings"
-    : "/api/poll-bookings";
-  const { data: authData } = await supabase.auth.getSession();
-  const accessToken = authData?.session?.access_token;
-  if (!accessToken) {
-    setStatus("Auth session missing.");
-    return;
-  }
+  const apiUrl = "https://walkingtours.vercel.app/api/poll-bookings?token=danslecullabalayettelemancheetletiquette&use_llm=1";
 
   checkNewEmailsBtn.disabled = true;
   setStatus("Checking new emails...");
 
   try {
     const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ use_llm: true }),
+      method: "GET",
     });
     const contentType = response.headers.get("content-type") || "";
     const result = contentType.includes("application/json")
