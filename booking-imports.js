@@ -25,6 +25,10 @@ function clearChildren(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function closeMenu() {
   avatarDropdown?.classList.remove("open");
   avatarButton?.setAttribute("aria-expanded", "false");
@@ -143,8 +147,9 @@ async function checkNewEmails() {
     }
 
     setStatus(`Checked ${result.checked || 0} emails. ${result.imported || 0} import(s) ready for review.`);
+    await sleep(500);
     await loadToursIndex();
-    await loadDrafts();
+    await loadDrafts({ preserveStatus: true });
   } catch (error) {
     console.error("check new emails error", error);
     setStatus(error?.message || "Check new emails failed.");
