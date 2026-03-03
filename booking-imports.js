@@ -31,6 +31,10 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isMissingImportEmailColumn(error) {
+  return /import_email/i.test(String(error?.message || ""));
+}
+
 function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -103,10 +107,17 @@ async function loadSharedGuides() {
     if (row.shared_with_id) sharedGuideIds.add(row.shared_with_id);
   });
 
-  const { data: profiles } = await supabase
+  let { data: profiles, error: profilesError } = await supabase
     .from("guide_profiles")
     .select("id,first_name,last_name,email,import_email")
     .in("id", Array.from(sharedGuideIds));
+  if (profilesError && isMissingImportEmailColumn(profilesError)) {
+    ({ data: profiles } = await supabase
+      .from("guide_profiles")
+      .select("id,first_name,last_name,email")
+      .in("id", Array.from(sharedGuideIds)));
+    profiles = (profiles || []).map((profile) => ({ ...profile, import_email: null }));
+  }
   (profiles || []).forEach((profile) => {
     sharedGuideProfiles.set(profile.id, profile);
     if (profile.id === session.user.id) {

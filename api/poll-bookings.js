@@ -14,6 +14,10 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isMissingImportEmailColumn(error) {
+  return /import_email/i.test(String(error?.message || ""));
+}
+
 async function verifyUserId(req) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
@@ -738,14 +742,26 @@ module.exports = async (req, res) => {
     if (toursRes.error) throw new Error(toursRes.error.message);
     if (tourTypesRes.error) throw new Error(tourTypesRes.error.message);
     if (existingEmailsRes.error) throw new Error(existingEmailsRes.error.message);
-    if (profilesRes.error) throw new Error(profilesRes.error.message);
+    let profilesData = profilesRes.data || [];
+    if (profilesRes.error && isMissingImportEmailColumn(profilesRes.error)) {
+      const fallbackProfilesRes = await supabase
+        .from("guide_profiles")
+        .select("id,email");
+      if (fallbackProfilesRes.error) throw new Error(fallbackProfilesRes.error.message);
+      profilesData = (fallbackProfilesRes.data || []).map((profile) => ({
+        ...profile,
+        import_email: null,
+      }));
+    } else if (profilesRes.error) {
+      throw new Error(profilesRes.error.message);
+    }
     if (shareRowsRes.error) throw new Error(shareRowsRes.error.message);
 
     const knownMessages = new Map(
       (existingEmailsRes.data || []).map((row) => [row.gmail_message_id, row.status])
     );
     const guideByEmail = new Map(
-      (profilesRes.data || []).flatMap((profile) => {
+      profilesData.flatMap((profile) => {
         const keys = new Set([
           normalizeEmail(profile.email),
           normalizeEmail(profile.import_email),
@@ -756,7 +772,7 @@ module.exports = async (req, res) => {
       })
     );
     const sharedGuideIdsByGuideId = new Map(
-      (profilesRes.data || []).map((profile) => [
+      profilesData.map((profile) => [
         profile.id,
         buildSharedGuideIds(shareRowsRes.data || [], profile.id),
       ])

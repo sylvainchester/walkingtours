@@ -43,6 +43,30 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isMissingImportEmailColumn(error) {
+  return /import_email/i.test(String(error?.message || ""));
+}
+
+async function loadGuideProfile(userId) {
+  let query = supabase
+    .from("guide_profiles")
+    .select("first_name,last_name,email,import_email,sort_code,account_number,account_name")
+    .eq("id", userId)
+    .maybeSingle();
+  let { data: profile, error } = await query;
+
+  if (error && isMissingImportEmailColumn(error)) {
+    ({ data: profile, error } = await supabase
+      .from("guide_profiles")
+      .select("first_name,last_name,email,sort_code,account_number,account_name")
+      .eq("id", userId)
+      .maybeSingle());
+    if (profile) profile.import_email = null;
+  }
+
+  return { profile, error };
+}
+
 async function loadProfile() {
   const { data } = await supabase.auth.getSession();
   session = data.session;
@@ -53,14 +77,10 @@ async function loadProfile() {
   await ensurePushSubscription(supabase, session);
   await refreshShareInviteIndicators();
 
-  const { data: profile, error } = await supabase
-    .from("guide_profiles")
-    .select("first_name,last_name,email,import_email,sort_code,account_number,account_name")
-    .eq("id", session.user.id)
-    .maybeSingle();
+  const { profile, error } = await loadGuideProfile(session.user.id);
 
   if (error || !profile) {
-    setStatus("Profile not found.");
+    setStatus(error?.message || "Profile not found.");
     return;
   }
 
@@ -77,15 +97,32 @@ async function loadProfile() {
 
 async function saveBankDetails() {
   if (!session) return;
-  const { error } = await supabase
+  const payload = {
+    import_email: normalizeEmail(importEmail.value) || null,
+    sort_code: sortCode.value.trim() || null,
+    account_number: accountNumber.value.trim() || null,
+    account_name: accountName.value.trim() || null,
+  };
+
+  let { error } = await supabase
     .from("guide_profiles")
-    .update({
-      import_email: normalizeEmail(importEmail.value) || null,
-      sort_code: sortCode.value.trim() || null,
-      account_number: accountNumber.value.trim() || null,
-      account_name: accountName.value.trim() || null,
-    })
+    .update(payload)
     .eq("id", session.user.id);
+
+  if (error && isMissingImportEmailColumn(error)) {
+    ({ error } = await supabase
+      .from("guide_profiles")
+      .update({
+        sort_code: payload.sort_code,
+        account_number: payload.account_number,
+        account_name: payload.account_name,
+      })
+      .eq("id", session.user.id));
+    if (!error) {
+      setStatus("Saved. Run supabase_patch28.sql to enable booking import email alias.");
+      return;
+    }
+  }
 
   if (error) {
     setStatus(`Save error: ${error.message}`);
