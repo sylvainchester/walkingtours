@@ -6,6 +6,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const profileInfo = document.getElementById("profileInfo");
 const importEmail = document.getElementById("importEmail");
+const importEmail2 = document.getElementById("importEmail2");
 const sortCode = document.getElementById("sortCode");
 const accountNumber = document.getElementById("accountNumber");
 const accountName = document.getElementById("accountName");
@@ -48,12 +49,20 @@ function isMissingImportEmailColumn(error) {
 }
 
 async function loadGuideProfile(userId) {
-  let query = supabase
+  let { data: profile, error } = await supabase
     .from("guide_profiles")
-    .select("first_name,last_name,email,import_email,sort_code,account_number,account_name")
+    .select("first_name,last_name,email,import_email,import_email_2,sort_code,account_number,account_name")
     .eq("id", userId)
     .maybeSingle();
-  let { data: profile, error } = await query;
+
+  if (error && isMissingImportEmailColumn(error)) {
+    ({ data: profile, error } = await supabase
+      .from("guide_profiles")
+      .select("first_name,last_name,email,import_email,sort_code,account_number,account_name")
+      .eq("id", userId)
+      .maybeSingle());
+    if (profile) profile.import_email_2 = null;
+  }
 
   if (error && isMissingImportEmailColumn(error)) {
     ({ data: profile, error } = await supabase
@@ -61,7 +70,10 @@ async function loadGuideProfile(userId) {
       .select("first_name,last_name,email,sort_code,account_number,account_name")
       .eq("id", userId)
       .maybeSingle());
-    if (profile) profile.import_email = null;
+    if (profile) {
+      profile.import_email = null;
+      profile.import_email_2 = null;
+    }
   }
 
   return { profile, error };
@@ -90,6 +102,7 @@ async function loadProfile() {
   profileInfo.appendChild(info);
 
   importEmail.value = profile.import_email || "";
+  importEmail2.value = profile.import_email_2 || "";
   sortCode.value = profile.sort_code || "";
   accountNumber.value = profile.account_number || "";
   accountName.value = profile.account_name || "";
@@ -99,6 +112,7 @@ async function saveBankDetails() {
   if (!session) return;
   const payload = {
     import_email: normalizeEmail(importEmail.value) || null,
+    import_email_2: normalizeEmail(importEmail2.value) || null,
     sort_code: sortCode.value.trim() || null,
     account_number: accountNumber.value.trim() || null,
     account_name: accountName.value.trim() || null,
@@ -113,13 +127,29 @@ async function saveBankDetails() {
     ({ error } = await supabase
       .from("guide_profiles")
       .update({
+        import_email: payload.import_email,
         sort_code: payload.sort_code,
         account_number: payload.account_number,
         account_name: payload.account_name,
       })
       .eq("id", session.user.id));
     if (!error) {
-      setStatus("Saved. Run supabase_patch28.sql to enable booking import email alias.");
+      setStatus("Saved. Run supabase_patch29.sql to enable the second booking import email alias.");
+      return;
+    }
+  }
+
+  if (error && isMissingImportEmailColumn(error)) {
+    ({ error } = await supabase
+      .from("guide_profiles")
+      .update({
+        sort_code: payload.sort_code,
+        account_number: payload.account_number,
+        account_name: payload.account_name,
+      })
+      .eq("id", session.user.id));
+    if (!error) {
+      setStatus("Saved. Run supabase_patch28.sql and supabase_patch29.sql to enable booking import email aliases.");
       return;
     }
   }

@@ -111,20 +111,32 @@ async function loadSharedGuides() {
 
   let { data: profiles, error: profilesError } = await supabase
     .from("guide_profiles")
-    .select("id,first_name,last_name,email,import_email")
+    .select("id,first_name,last_name,email,import_email,import_email_2")
     .in("id", Array.from(sharedGuideIds));
+  if (profilesError && isMissingImportEmailColumn(profilesError)) {
+    ({ data: profiles } = await supabase
+      .from("guide_profiles")
+      .select("id,first_name,last_name,email,import_email")
+      .in("id", Array.from(sharedGuideIds)));
+    profiles = (profiles || []).map((profile) => ({ ...profile, import_email_2: null }));
+  }
   if (profilesError && isMissingImportEmailColumn(profilesError)) {
     ({ data: profiles } = await supabase
       .from("guide_profiles")
       .select("id,first_name,last_name,email")
       .in("id", Array.from(sharedGuideIds)));
-    profiles = (profiles || []).map((profile) => ({ ...profile, import_email: null }));
+    profiles = (profiles || []).map((profile) => ({
+      ...profile,
+      import_email: null,
+      import_email_2: null,
+    }));
   }
   (profiles || []).forEach((profile) => {
     sharedGuideProfiles.set(profile.id, profile);
     if (profile.id === session.user.id) {
       if (normalizeEmail(profile.email)) recognizedImportEmails.add(normalizeEmail(profile.email));
       if (normalizeEmail(profile.import_email)) recognizedImportEmails.add(normalizeEmail(profile.import_email));
+      if (normalizeEmail(profile.import_email_2)) recognizedImportEmails.add(normalizeEmail(profile.import_email_2));
     }
   });
 }

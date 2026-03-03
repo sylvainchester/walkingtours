@@ -733,7 +733,7 @@ module.exports = async (req, res) => {
         .limit(500),
       supabase
         .from("guide_profiles")
-        .select("id,email,import_email"),
+        .select("id,email,import_email,import_email_2"),
       supabase
         .from("guide_shares")
         .select("guide_id,shared_with_id"),
@@ -746,11 +746,22 @@ module.exports = async (req, res) => {
     if (profilesRes.error && isMissingImportEmailColumn(profilesRes.error)) {
       const fallbackProfilesRes = await supabase
         .from("guide_profiles")
+        .select("id,email,import_email");
+      if (fallbackProfilesRes.error) throw new Error(fallbackProfilesRes.error.message);
+      profilesData = (fallbackProfilesRes.data || []).map((profile) => ({
+        ...profile,
+        import_email_2: null,
+      }));
+    }
+    if (profilesRes.error && isMissingImportEmailColumn(profilesRes.error)) {
+      const fallbackProfilesRes = await supabase
+        .from("guide_profiles")
         .select("id,email");
       if (fallbackProfilesRes.error) throw new Error(fallbackProfilesRes.error.message);
       profilesData = (fallbackProfilesRes.data || []).map((profile) => ({
         ...profile,
         import_email: null,
+        import_email_2: null,
       }));
     } else if (profilesRes.error) {
       throw new Error(profilesRes.error.message);
@@ -765,6 +776,7 @@ module.exports = async (req, res) => {
         const keys = new Set([
           normalizeEmail(profile.email),
           normalizeEmail(profile.import_email),
+          normalizeEmail(profile.import_email_2),
         ]);
         return Array.from(keys)
           .filter(Boolean)
