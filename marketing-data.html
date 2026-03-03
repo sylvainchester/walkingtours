@@ -4,16 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f6f1d4" />
-    <title>Booking Imports - Walking Tours</title>
+    <title>Marketing Data - Walking Tours</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body class="readme-page booking-imports-page">
+  <body>
     <div class="app">
       <header class="topbar">
         <div>
-          <h1>Booking Imports</h1>
+          <h1>Marketing Data</h1>
         </div>
         <div class="avatar-menu" id="avatarMenu">
           <button id="avatarButton" class="avatar" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
@@ -35,22 +35,15 @@
         </div>
       </header>
 
-      <section class="booking-imports-shell" aria-live="polite">
-        <div class="details-title strong-title">Pending Reviews</div>
-        <div class="form-row">
-          <button id="checkNewEmailsBtn" class="primary" type="button">Check new emails</button>
+      <section class="details" aria-live="polite">
+        <div class="details-title">Marketing Data</div>
+        <div class="details-content">
+          <div class="readme-line">Under construction.</div>
         </div>
-        <div id="bookingImportStatus" class="muted"></div>
-        <div id="bookingImportsList" class="booking-imports-list"></div>
-      </section>
-
-      <section class="booking-imports-shell" aria-live="polite">
-        <div class="details-title strong-title">Confirmed Imports</div>
-        <div id="confirmedBookingImportsList" class="booking-imports-list"></div>
       </section>
     </div>
 
-    <script type="module" src="booking-imports.js"></script>
+    <script type="module" src="readme.js"></script>
     <script src="sw-register.js"></script>
   </body>
 </html>
