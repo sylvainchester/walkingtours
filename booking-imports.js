@@ -17,6 +17,7 @@ let session = null;
 let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
 let toursById = new Map();
+let recognizedImportEmails = new Set();
 
 function setStatus(message) {
   if (bookingImportStatus) bookingImportStatus.textContent = message || "";
@@ -90,6 +91,7 @@ async function refreshShareInviteIndicators() {
 async function loadSharedGuides() {
   sharedGuideIds = new Set([session.user.id]);
   sharedGuideProfiles = new Map();
+  recognizedImportEmails = new Set([normalizeEmail(session.user.email)]);
 
   const { data: shareRows } = await supabase
     .from("guide_shares")
@@ -103,9 +105,15 @@ async function loadSharedGuides() {
 
   const { data: profiles } = await supabase
     .from("guide_profiles")
-    .select("id,first_name,last_name")
+    .select("id,first_name,last_name,email,import_email")
     .in("id", Array.from(sharedGuideIds));
-  (profiles || []).forEach((profile) => sharedGuideProfiles.set(profile.id, profile));
+  (profiles || []).forEach((profile) => {
+    sharedGuideProfiles.set(profile.id, profile);
+    if (profile.id === session.user.id) {
+      if (normalizeEmail(profile.email)) recognizedImportEmails.add(normalizeEmail(profile.email));
+      if (normalizeEmail(profile.import_email)) recognizedImportEmails.add(normalizeEmail(profile.import_email));
+    }
+  });
 }
 
 async function loadToursIndex() {
@@ -205,7 +213,6 @@ async function loadDrafts(options = {}) {
   const { data, error } = await supabase
     .from("incoming_booking_emails")
     .select("id,subject,from_email,received_at,raw_text,raw_html,matched_tour_id,matched_platform_name,imported_participants,llm_extraction,status,error_message,created_at")
-    .eq("from_email", normalizeEmail(session?.user?.email))
     .in("status", ["pending_review", "error", "ignored", "confirmed"])
     .order("created_at", { ascending: false });
 
@@ -215,6 +222,7 @@ async function loadDrafts(options = {}) {
   }
 
   const visibleRows = (data || []).filter((draft) => {
+    if (!recognizedImportEmails.has(normalizeEmail(draft.from_email))) return false;
     if (!draft.matched_tour_id) return true;
     const tour = toursById.get(draft.matched_tour_id);
     if (!tour) return true;

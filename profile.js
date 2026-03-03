@@ -5,6 +5,7 @@ import { ensurePushSubscription } from "./push.js";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const profileInfo = document.getElementById("profileInfo");
+const importEmail = document.getElementById("importEmail");
 const sortCode = document.getElementById("sortCode");
 const accountNumber = document.getElementById("accountNumber");
 const accountName = document.getElementById("accountName");
@@ -38,6 +39,10 @@ function clearChildren(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 async function loadProfile() {
   const { data } = await supabase.auth.getSession();
   session = data.session;
@@ -50,7 +55,7 @@ async function loadProfile() {
 
   const { data: profile, error } = await supabase
     .from("guide_profiles")
-    .select("first_name,last_name,email,sort_code,account_number,account_name")
+    .select("first_name,last_name,email,import_email,sort_code,account_number,account_name")
     .eq("id", session.user.id)
     .maybeSingle();
 
@@ -64,6 +69,7 @@ async function loadProfile() {
   info.textContent = `${profile.first_name} ${profile.last_name} · ${profile.email}`;
   profileInfo.appendChild(info);
 
+  importEmail.value = profile.import_email || "";
   sortCode.value = profile.sort_code || "";
   accountNumber.value = profile.account_number || "";
   accountName.value = profile.account_name || "";
@@ -74,6 +80,7 @@ async function saveBankDetails() {
   const { error } = await supabase
     .from("guide_profiles")
     .update({
+      import_email: normalizeEmail(importEmail.value) || null,
       sort_code: sortCode.value.trim() || null,
       account_number: accountNumber.value.trim() || null,
       account_name: accountName.value.trim() || null,

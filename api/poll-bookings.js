@@ -729,7 +729,7 @@ module.exports = async (req, res) => {
         .limit(500),
       supabase
         .from("guide_profiles")
-        .select("id,email"),
+        .select("id,email,import_email"),
       supabase
         .from("guide_shares")
         .select("guide_id,shared_with_id"),
@@ -745,9 +745,15 @@ module.exports = async (req, res) => {
       (existingEmailsRes.data || []).map((row) => [row.gmail_message_id, row.status])
     );
     const guideByEmail = new Map(
-      (profilesRes.data || [])
-        .filter((profile) => normalizeEmail(profile.email))
-        .map((profile) => [normalizeEmail(profile.email), profile])
+      (profilesRes.data || []).flatMap((profile) => {
+        const keys = new Set([
+          normalizeEmail(profile.email),
+          normalizeEmail(profile.import_email),
+        ]);
+        return Array.from(keys)
+          .filter(Boolean)
+          .map((key) => [key, profile]);
+      })
     );
     const sharedGuideIdsByGuideId = new Map(
       (profilesRes.data || []).map((profile) => [
