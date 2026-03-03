@@ -222,9 +222,6 @@ async function loadDrafts(options = {}) {
     matchLine.textContent = `Matched tour: ${formatTourLabel(matchedTour)}`;
     card.appendChild(matchLine);
 
-    const proposed = document.createElement("div");
-    proposed.className = "booking-import-columns";
-
     const left = document.createElement("div");
     left.className = "booking-import-panel";
     const leftTitle = document.createElement("div");
@@ -283,9 +280,8 @@ async function loadDrafts(options = {}) {
       toggleEmailBtn.textContent = shouldShow ? "Hide email" : "Show email";
     });
 
-    proposed.appendChild(left);
-    proposed.appendChild(right);
-    card.appendChild(proposed);
+    card.appendChild(left);
+    card.appendChild(right);
 
     if (draft.error_message) {
       const errorLine = document.createElement("div");
