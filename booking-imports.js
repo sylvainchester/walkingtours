@@ -222,11 +222,6 @@ async function loadDrafts(options = {}) {
     matchLine.textContent = `Matched tour: ${formatTourLabel(matchedTour)}`;
     card.appendChild(matchLine);
 
-    const platformLine = document.createElement("div");
-    platformLine.className = "readme-line";
-    platformLine.textContent = `Platform: ${draft.matched_platform_name || draft.llm_extraction?.platform_name || "Unknown"}`;
-    card.appendChild(platformLine);
-
     const proposed = document.createElement("div");
     proposed.className = "booking-import-columns";
 
