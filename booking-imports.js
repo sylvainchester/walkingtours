@@ -33,6 +33,30 @@ function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function ordinal(day) {
+  const value = Number(day);
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
+  const mod10 = value % 10;
+  if (mod10 === 1) return `${value}st`;
+  if (mod10 === 2) return `${value}nd`;
+  if (mod10 === 3) return `${value}rd`;
+  return `${value}th`;
+}
+
+function formatShortDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const day = ordinal(date.getUTCDate());
+  const month = date.toLocaleDateString("en-GB", {
+    month: "short",
+    timeZone: "UTC",
+  });
+  const year = date.getUTCFullYear();
+  return `${day} of ${month} ${year}`;
+}
+
 async function refreshDraftsAfterImportCheck() {
   await loadToursIndex();
   await loadDrafts({ preserveStatus: true });
@@ -213,7 +237,7 @@ async function loadDrafts(options = {}) {
 
     const meta = document.createElement("div");
     meta.className = "muted";
-    meta.textContent = `${draft.from_email || "Unknown sender"} · ${draft.received_at || draft.created_at || ""}`;
+    meta.textContent = `${draft.from_email || "Unknown sender"} · ${formatShortDate(draft.received_at || draft.created_at)}`;
     card.appendChild(meta);
 
     const matchedTour = toursById.get(draft.matched_tour_id);
@@ -242,18 +266,19 @@ async function loadDrafts(options = {}) {
       : "No participants proposed.";
     left.appendChild(participantsText);
 
-    const right = document.createElement("div");
-    right.className = "booking-import-panel";
-    const rightTitle = document.createElement("div");
-    rightTitle.className = "details-title";
-    rightTitle.textContent = "Original email";
-    right.appendChild(rightTitle);
-
     const toggleEmailBtn = document.createElement("button");
     toggleEmailBtn.type = "button";
     toggleEmailBtn.className = "ghost";
     toggleEmailBtn.textContent = "Show email";
-    right.appendChild(toggleEmailBtn);
+    card.appendChild(toggleEmailBtn);
+
+    const right = document.createElement("div");
+    right.className = "booking-import-panel";
+    right.hidden = true;
+    const rightTitle = document.createElement("div");
+    rightTitle.className = "details-title";
+    rightTitle.textContent = "Original email";
+    right.appendChild(rightTitle);
 
     const previewWrap = document.createElement("div");
     previewWrap.className = "booking-import-preview-wrap";
@@ -275,7 +300,8 @@ async function loadDrafts(options = {}) {
     right.appendChild(previewWrap);
 
     toggleEmailBtn.addEventListener("click", () => {
-      const shouldShow = previewWrap.hidden;
+      const shouldShow = right.hidden;
+      right.hidden = !shouldShow;
       previewWrap.hidden = !shouldShow;
       toggleEmailBtn.textContent = shouldShow ? "Hide email" : "Show email";
     });
