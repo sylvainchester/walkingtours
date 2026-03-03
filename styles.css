@@ -166,14 +166,6 @@ h1 {
   color: #e62e2e;
 }
 
-.booking-import-preview-wrap {
-  margin-top: 10px;
-  border: 1px solid var(--cell-border);
-  border-radius: 16px;
-  overflow: hidden;
-  background: #fff;
-}
-
 .booking-import-preview {
   width: 100%;
   height: 560px;

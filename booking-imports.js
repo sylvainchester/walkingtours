@@ -279,23 +279,18 @@ async function loadDrafts(options = {}) {
     right.className = "booking-import-panel";
     right.hidden = true;
 
-    const previewWrap = document.createElement("div");
-    previewWrap.className = "booking-import-preview-wrap";
-
     if (draft.raw_html) {
       const previewFrame = document.createElement("iframe");
       previewFrame.className = "booking-import-preview";
       previewFrame.setAttribute("sandbox", "");
       previewFrame.srcdoc = draft.raw_html;
-      previewWrap.appendChild(previewFrame);
+      right.appendChild(previewFrame);
     } else {
       const raw = document.createElement("pre");
       raw.className = "booking-import-raw";
       raw.textContent = draft.raw_text || "";
-      previewWrap.appendChild(raw);
+      right.appendChild(raw);
     }
-
-    right.appendChild(previewWrap);
 
     toggleEmailBtn.addEventListener("click", () => {
       const shouldShow = right.hidden;
