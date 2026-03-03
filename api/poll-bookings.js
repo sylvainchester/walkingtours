@@ -280,7 +280,68 @@ function normalizeTimeValue(value) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-function matchTourFromLLM(extraction, tours) {
+function normalizePlatformKey(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function splitPlatformWords(value) {
+  return String(value || "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function buildPlatformAliases(value) {
+  const name = String(value || "").trim();
+  const aliases = new Set();
+  const normalized = normalizePlatformKey(name);
+  if (normalized) aliases.add(normalized);
+
+  const words = splitPlatformWords(name);
+  if (words.length > 1) {
+    aliases.add(words.map((word) => word[0]).join("").toLowerCase());
+  }
+  return aliases;
+}
+
+function resolveTourTypeForTour(tour, tourTypes) {
+  const normalizedType = String(tour?.type || "").trim().toLowerCase();
+  if (!normalizedType) return null;
+  const exact = (tourTypes || []).find(
+    (tourType) => tourType.guide_id === tour.guide_id
+      && String(tourType.name || "").trim().toLowerCase() === normalizedType
+  );
+  if (exact) return exact;
+  return (tourTypes || []).find(
+    (tourType) => String(tourType.name || "").trim().toLowerCase() === normalizedType
+  ) || null;
+}
+
+function resolveCanonicalPlatformName(platformHint, platforms) {
+  const hint = normalizePlatformKey(platformHint);
+  if (!hint) return null;
+
+  for (const platform of platforms || []) {
+    const name = String(platform?.name || "").trim();
+    if (!name) continue;
+    const aliases = buildPlatformAliases(name);
+    if (aliases.has(hint)) return name;
+  }
+
+  for (const platform of platforms || []) {
+    const name = String(platform?.name || "").trim();
+    const normalized = normalizePlatformKey(name);
+    if (!normalized) continue;
+    if ((hint.length >= 3 && normalized.includes(hint)) || (normalized.length >= 3 && hint.includes(normalized))) {
+      return name;
+    }
+  }
+
+  return null;
+}
+
+function matchTourFromLLM(extraction, tours, tourTypes) {
   if (!extraction || !Array.isArray(tours)) {
     return { matchedTour: null, ambiguityCount: 0 };
   }
@@ -307,16 +368,23 @@ function matchTourFromLLM(extraction, tours) {
   }
   if (matchedPlatform) {
     const byPlatform = candidates.filter((tour) => {
-      const name = String(tour.platform?.name || "").trim();
-      return name && name.toLowerCase() === matchedPlatform.toLowerCase();
+      const tourType = resolveTourTypeForTour(tour, tourTypes || []);
+      const platforms = Array.isArray(tourType?.platforms) ? tourType.platforms : [];
+      return Boolean(resolveCanonicalPlatformName(matchedPlatform, platforms));
     });
     if (byPlatform.length) candidates = byPlatform;
   }
 
+  const matchedTour = candidates.length === 1 ? candidates[0] : null;
+  const matchedTourType = matchedTour ? resolveTourTypeForTour(matchedTour, tourTypes || []) : null;
+  const canonicalPlatform = matchedTourType
+    ? resolveCanonicalPlatformName(matchedPlatform, matchedTourType.platforms || [])
+    : null;
+
   if (candidates.length !== 1) {
     return {
       matchedTour: null,
-      matchedPlatform,
+      matchedPlatform: canonicalPlatform || matchedPlatform,
       matchedType,
       dates: normalizedDate ? [normalizedDate] : [],
       times: normalizedTime ? [normalizedTime] : [],
@@ -325,8 +393,8 @@ function matchTourFromLLM(extraction, tours) {
   }
 
   return {
-    matchedTour: candidates[0],
-    matchedPlatform: matchedPlatform || String(candidates[0].platform?.name || "").trim() || null,
+    matchedTour,
+    matchedPlatform: canonicalPlatform || null,
     matchedType,
     dates: normalizedDate ? [normalizedDate] : [],
     times: normalizedTime ? [normalizedTime] : [],
@@ -394,6 +462,7 @@ async function extractWithLLM({ subject, rawText }) {
               text:
                 "Extract booking information from a forwarded reservation email. " +
                 "Return JSON only. Prefer the booked experience date/time over email sent date, cancellation date, or policy dates. " +
+                "Platform names may appear as abbreviations or expanded names, for example GYG and GetYourGuide. " +
                 "If a value is missing, return null. If only one booking contact exists and the total guest count is clear, " +
                 "you may use that person's name with the detected group size.",
             },
@@ -538,16 +607,23 @@ function matchTour({ text, subject, tours, tourTypes }) {
   }
   if (matchedPlatform) {
     const byPlatform = candidates.filter((tour) => {
-      const name = String(tour.platform?.name || "").trim();
-      return name && name.toLowerCase() === matchedPlatform.toLowerCase();
+      const tourType = resolveTourTypeForTour(tour, tourTypes || []);
+      const platforms = Array.isArray(tourType?.platforms) ? tourType.platforms : [];
+      return Boolean(resolveCanonicalPlatformName(matchedPlatform, platforms));
     });
     if (byPlatform.length) candidates = byPlatform;
   }
 
+  const matchedTour = candidates.length === 1 ? candidates[0] : null;
+  const matchedTourType = matchedTour ? resolveTourTypeForTour(matchedTour, tourTypes || []) : null;
+  const canonicalPlatform = matchedTourType
+    ? resolveCanonicalPlatformName(matchedPlatform, matchedTourType.platforms || [])
+    : null;
+
   if (candidates.length !== 1) {
     return {
       matchedTour: null,
-      matchedPlatform,
+      matchedPlatform: canonicalPlatform || matchedPlatform,
       matchedType,
       dates,
       times,
@@ -556,8 +632,8 @@ function matchTour({ text, subject, tours, tourTypes }) {
   }
 
   return {
-    matchedTour: candidates[0],
-    matchedPlatform: matchedPlatform || String(candidates[0].platform?.name || "").trim() || null,
+    matchedTour,
+    matchedPlatform: canonicalPlatform || null,
     matchedType,
     dates,
     times,
@@ -739,7 +815,7 @@ module.exports = async (req, res) => {
       const effectiveParticipants = useLlm && extractedParticipants.length ? extractedParticipants : participants;
       const match = senderGuide
         ? (useLlm && parsedLlm
-            ? matchTourFromLLM(parsedLlm, candidateTours)
+            ? matchTourFromLLM(parsedLlm, candidateTours, candidateTourTypes)
             : matchTour({
                 text: rawText,
                 subject,
