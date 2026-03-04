@@ -473,7 +473,7 @@ async function renderTourModal(tour) {
   const isCreator = session && tour.created_by === session.user.id;
   const canManageLock = Boolean(session) && (isOwner || isCreator);
   const isLocked = Boolean(tour.participants_locked);
-  const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isPast && !isLocked && !isPrivate;
+  const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isLocked && !isPrivate;
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
   const canEditTourGuide = Boolean(session) && !isPast && !isLocked && !isPrivate && (isOwner || isCreator);
   const typeForTour = tourTypes.find((type) => type.guide_id === tour.guide_id && type.name === tour.type)
