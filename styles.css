@@ -45,6 +45,10 @@ body.booking-imports-page {
   overflow-y: auto;
 }
 
+body.profile-page {
+  overflow-y: auto;
+}
+
 .app {
   width: 100%;
   max-width: 980px;
@@ -78,6 +82,11 @@ body.booking-imports-page {
   height: auto;
   min-height: calc(var(--vh, 1vh) * 100);
   padding: 16px 12px 24px;
+}
+
+.profile-page .app {
+  height: auto;
+  min-height: calc(var(--vh, 1vh) * 100);
 }
 
 .main-page {
