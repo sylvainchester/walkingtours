@@ -34,6 +34,8 @@ let tourTypes = [];
 let selectedTourIds = new Set();
 let modalOpenTourId = null;
 let ocrBusy = false;
+let viewerColorMode = "auto";
+let viewerGuideColorOverrides = {};
 
 function setStatus(message) {
   if (bulkStatus) bulkStatus.textContent = message || "";
@@ -98,7 +100,37 @@ function getGuideColorIndex(guideId) {
   return Math.min(index, GUIDE_COLOR_CLASSES.length - 1);
 }
 
+function normalizeGuideColorClass(value) {
+  const colorClass = String(value || "").trim();
+  return GUIDE_COLOR_CLASSES.includes(colorClass) ? colorClass : null;
+}
+
+async function loadViewerColorPreferences() {
+  viewerColorMode = "auto";
+  viewerGuideColorOverrides = {};
+  if (!session?.user?.id) return;
+
+  const { data, error } = await supabase
+    .from("guide_profiles")
+    .select("color_mode,guide_color_overrides")
+    .eq("id", session.user.id)
+    .maybeSingle();
+  if (error) {
+    if (/color_mode|guide_color_overrides/i.test(String(error.message || ""))) return;
+    return;
+  }
+  if (!data) return;
+  viewerColorMode = data.color_mode === "custom" ? "custom" : "auto";
+  viewerGuideColorOverrides = (data.guide_color_overrides && typeof data.guide_color_overrides === "object")
+    ? data.guide_color_overrides
+    : {};
+}
+
 function getGuideColorClass(guideId) {
+  if (viewerColorMode === "custom") {
+    const customClass = normalizeGuideColorClass(viewerGuideColorOverrides?.[guideId]);
+    if (customClass) return customClass;
+  }
   return GUIDE_COLOR_CLASSES[getGuideColorIndex(guideId)] || GUIDE_COLOR_CLASSES[0];
 }
 
@@ -1086,6 +1118,7 @@ async function init() {
     return;
   }
 
+  await loadViewerColorPreferences();
   await ensurePushSubscription(supabase, session);
   await refreshShareInviteIndicators();
   await loadSharedGuides();

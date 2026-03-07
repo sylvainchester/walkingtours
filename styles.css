@@ -776,7 +776,7 @@ h1 {
 }
 
 .day-panel {
-  min-height: 0;
+  min-height: 110px;
   overflow: hidden;
   margin-top: 0;
 }
@@ -1098,5 +1098,26 @@ h1 {
   }
   .label span {
     white-space: normal;
+  }
+}
+
+@media (max-height: 760px) {
+  .calendar {
+    --cell: min(10vw, 6.6vh, 46px);
+    padding: 8px;
+  }
+
+  .grid {
+    gap: 4px;
+    height: calc(var(--cell) * 6 + 4px * 5);
+  }
+
+  .day {
+    font-size: 16px;
+    padding: 6px 5px 3px 5px;
+  }
+
+  .day-panel {
+    min-height: 130px;
   }
 }

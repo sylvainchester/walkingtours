@@ -7,6 +7,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const profileInfo = document.getElementById("profileInfo");
 const importEmail = document.getElementById("importEmail");
 const importEmail2 = document.getElementById("importEmail2");
+const useCustomGuideColors = document.getElementById("useCustomGuideColors");
+const guideColorRows = document.getElementById("guideColorRows");
 const sortCode = document.getElementById("sortCode");
 const accountNumber = document.getElementById("accountNumber");
 const accountName = document.getElementById("accountName");
@@ -17,6 +19,17 @@ const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
 
 let session = null;
+let sharedGuideIds = [];
+let sharedGuideProfiles = new Map();
+let loadedGuideColorOverrides = {};
+
+const GUIDE_COLOR_OPTIONS = [
+  { value: "guide-color-1", label: "Green" },
+  { value: "guide-color-2", label: "Blue" },
+  { value: "guide-color-3", label: "Pink" },
+  { value: "guide-color-4", label: "Violet" },
+  { value: "guide-color-5", label: "Brown" },
+];
 
 async function refreshShareInviteIndicators() {
   if (!session) return;
@@ -45,15 +58,113 @@ function normalizeEmail(value) {
 }
 
 function isMissingImportEmailColumn(error) {
-  return /import_email/i.test(String(error?.message || ""));
+  return /(import_email|import_email_2|color_mode|guide_color_overrides)/i.test(String(error?.message || ""));
+}
+
+function clearNode(node) {
+  while (node?.firstChild) node.removeChild(node.firstChild);
+}
+
+function getDefaultOrderedGuideIds() {
+  const ids = [...sharedGuideIds];
+  return ids.sort((leftId, rightId) => {
+    if (leftId === session?.user?.id) return -1;
+    if (rightId === session?.user?.id) return 1;
+    const leftProfile = sharedGuideProfiles.get(leftId);
+    const rightProfile = sharedGuideProfiles.get(rightId);
+    const leftName = `${leftProfile?.first_name || ""} ${leftProfile?.last_name || ""}`.trim() || leftId;
+    const rightName = `${rightProfile?.first_name || ""} ${rightProfile?.last_name || ""}`.trim() || rightId;
+    return leftName.localeCompare(rightName, "en", { sensitivity: "base" });
+  });
+}
+
+function getDefaultGuideColorClass(guideId) {
+  const orderedIds = getDefaultOrderedGuideIds();
+  const index = orderedIds.indexOf(guideId);
+  if (index === -1) return GUIDE_COLOR_OPTIONS[0].value;
+  return GUIDE_COLOR_OPTIONS[Math.min(index, GUIDE_COLOR_OPTIONS.length - 1)].value;
+}
+
+async function loadSharedGuidesForColorConfig() {
+  sharedGuideIds = [session.user.id];
+  sharedGuideProfiles = new Map();
+
+  const { data: shareRows } = await supabase
+    .from("guide_shares")
+    .select("guide_id,shared_with_id")
+    .or(`guide_id.eq.${session.user.id},shared_with_id.eq.${session.user.id}`);
+
+  (shareRows || []).forEach((row) => {
+    if (row.guide_id && !sharedGuideIds.includes(row.guide_id)) sharedGuideIds.push(row.guide_id);
+    if (row.shared_with_id && !sharedGuideIds.includes(row.shared_with_id)) sharedGuideIds.push(row.shared_with_id);
+  });
+
+  const { data: profiles } = await supabase
+    .from("guide_profiles")
+    .select("id,first_name,last_name")
+    .in("id", sharedGuideIds);
+
+  (profiles || []).forEach((profile) => {
+    sharedGuideProfiles.set(profile.id, profile);
+  });
+}
+
+function renderGuideColorRows() {
+  if (!guideColorRows) return;
+  clearNode(guideColorRows);
+  if (!useCustomGuideColors?.checked) return;
+
+  const orderedIds = getDefaultOrderedGuideIds();
+  orderedIds.forEach((guideId) => {
+    const row = document.createElement("div");
+    row.className = "form-row";
+
+    const label = document.createElement("div");
+    label.className = "muted";
+    const profile = sharedGuideProfiles.get(guideId);
+    label.textContent = profile
+      ? `${profile.first_name} ${profile.last_name}`
+      : guideId;
+    row.appendChild(label);
+
+    const select = document.createElement("select");
+    select.className = "select";
+    select.dataset.guideId = guideId;
+    const selected = String(
+      loadedGuideColorOverrides?.[guideId] || getDefaultGuideColorClass(guideId)
+    );
+    GUIDE_COLOR_OPTIONS.forEach((optionDef) => {
+      const option = document.createElement("option");
+      option.value = optionDef.value;
+      option.textContent = optionDef.label;
+      if (selected === optionDef.value) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    });
+    row.appendChild(select);
+    guideColorRows.appendChild(row);
+  });
 }
 
 async function loadGuideProfile(userId) {
   let { data: profile, error } = await supabase
     .from("guide_profiles")
-    .select("first_name,last_name,email,import_email,import_email_2,sort_code,account_number,account_name")
+    .select("first_name,last_name,email,import_email,import_email_2,color_mode,guide_color_overrides,sort_code,account_number,account_name")
     .eq("id", userId)
     .maybeSingle();
+
+  if (error && isMissingImportEmailColumn(error)) {
+    ({ data: profile, error } = await supabase
+      .from("guide_profiles")
+      .select("first_name,last_name,email,import_email,import_email_2,sort_code,account_number,account_name")
+      .eq("id", userId)
+      .maybeSingle());
+    if (profile) {
+      profile.color_mode = "auto";
+      profile.guide_color_overrides = {};
+    }
+  }
 
   if (error && isMissingImportEmailColumn(error)) {
     ({ data: profile, error } = await supabase
@@ -73,6 +184,8 @@ async function loadGuideProfile(userId) {
     if (profile) {
       profile.import_email = null;
       profile.import_email_2 = null;
+      profile.color_mode = "auto";
+      profile.guide_color_overrides = {};
     }
   }
 
@@ -103,6 +216,12 @@ async function loadProfile() {
 
   importEmail.value = profile.import_email || "";
   importEmail2.value = profile.import_email_2 || "";
+  useCustomGuideColors.checked = profile.color_mode === "custom";
+  loadedGuideColorOverrides = (profile.guide_color_overrides && typeof profile.guide_color_overrides === "object")
+    ? profile.guide_color_overrides
+    : {};
+  await loadSharedGuidesForColorConfig();
+  renderGuideColorRows();
   sortCode.value = profile.sort_code || "";
   accountNumber.value = profile.account_number || "";
   accountName.value = profile.account_name || "";
@@ -110,9 +229,20 @@ async function loadProfile() {
 
 async function saveBankDetails() {
   if (!session) return;
+  const colorOverrides = {};
+  guideColorRows?.querySelectorAll("select[data-guide-id]").forEach((select) => {
+    const guideId = select.dataset.guideId;
+    const colorValue = select.value;
+    if (guideId && GUIDE_COLOR_OPTIONS.some((option) => option.value === colorValue)) {
+      colorOverrides[guideId] = colorValue;
+    }
+  });
+
   const payload = {
     import_email: normalizeEmail(importEmail.value) || null,
     import_email_2: normalizeEmail(importEmail2.value) || null,
+    color_mode: useCustomGuideColors?.checked ? "custom" : "auto",
+    guide_color_overrides: colorOverrides,
     sort_code: sortCode.value.trim() || null,
     account_number: accountNumber.value.trim() || null,
     account_name: accountName.value.trim() || null,
@@ -128,13 +258,14 @@ async function saveBankDetails() {
       .from("guide_profiles")
       .update({
         import_email: payload.import_email,
+        import_email_2: payload.import_email_2,
         sort_code: payload.sort_code,
         account_number: payload.account_number,
         account_name: payload.account_name,
       })
       .eq("id", session.user.id));
     if (!error) {
-      setStatus("Saved. Run supabase_patch29.sql to enable the second booking import email alias.");
+      setStatus("Saved. Run supabase_patch30.sql to enable custom guide colors.");
       return;
     }
   }
@@ -162,6 +293,7 @@ async function saveBankDetails() {
 }
 
 saveProfile.addEventListener("click", saveBankDetails);
+useCustomGuideColors?.addEventListener("change", renderGuideColorRows);
 
 if (signOutBtn) {
   signOutBtn.addEventListener("click", async () => {
