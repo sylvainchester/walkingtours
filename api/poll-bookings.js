@@ -236,6 +236,12 @@ function extractEmail(value) {
   return match ? match[0] : null;
 }
 
+function extractAllEmails(value) {
+  return [...String(value || "").matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
+    .map((match) => normalizeEmail(match[0]))
+    .filter(Boolean);
+}
+
 function parseHeaderDate(value) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -700,6 +706,8 @@ module.exports = async (req, res) => {
       || String(req.query?.dry_run || req.body?.dry_run || "").toLowerCase() === "true";
     const useLlm = String(req.query?.use_llm || req.body?.use_llm || "").toLowerCase() === "1"
       || String(req.query?.use_llm || req.body?.use_llm || "").toLowerCase() === "true";
+    const debug = String(req.query?.debug || req.body?.debug || "").toLowerCase() === "1"
+      || String(req.query?.debug || req.body?.debug || "").toLowerCase() === "true";
     const tokenAuthorized = Boolean(expectedToken) && providedToken === expectedToken;
     const userId = tokenAuthorized ? null : await verifyUserId(req);
     if (!tokenAuthorized && !userId) {
@@ -710,10 +718,51 @@ module.exports = async (req, res) => {
     const supabase = await getSupabaseAdmin();
     const nowIso = new Date().toISOString().slice(0, 10);
 
+    if (debug) {
+      const [profileRes, messagesRes] = await Promise.all([
+        gmail.users.getProfile({ userId: "me" }),
+        gmail.users.messages.list({
+          userId: "me",
+          q: "in:anywhere is:unread newer_than:30d",
+          maxResults: 10,
+        }),
+      ]);
+
+      const messageRefs = messagesRes.data.messages || [];
+      const previews = [];
+      for (const messageRef of messageRefs) {
+        const fullMessage = await gmail.users.messages.get({
+          userId: "me",
+          id: messageRef.id,
+          format: "metadata",
+          metadataHeaders: ["Subject", "From", "To", "Date", "Message-Id"],
+        });
+        const headers = new Map(
+          (fullMessage.data.payload?.headers || []).map((header) => [header.name.toLowerCase(), header.value || ""])
+        );
+        previews.push({
+          id: fullMessage.data.id,
+          message_id: headers.get("message-id") || null,
+          subject: headers.get("subject") || "",
+          from: headers.get("from") || "",
+          to: headers.get("to") || "",
+          date: headers.get("date") || "",
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        debug: true,
+        gmail_address: profileRes.data.emailAddress || null,
+        unread_count: messagesRes.data.resultSizeEstimate || 0,
+        messages: previews,
+      });
+    }
+
     const [messagesRes, toursRes, tourTypesRes, existingEmailsRes, profilesRes, shareRowsRes] = await Promise.all([
       gmail.users.messages.list({
         userId: "me",
-        q: "in:inbox is:unread newer_than:30d",
+        q: "in:anywhere is:unread newer_than:30d",
         maxResults: 20,
       }),
       supabase
