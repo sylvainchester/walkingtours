@@ -12,6 +12,9 @@ const signOutBtn = document.getElementById("signOutBtn");
 const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
 const shareLink = document.getElementById("shareLink");
+const bookingImportModal = document.getElementById("bookingImportModal");
+const bookingImportModalBody = document.getElementById("bookingImportModalBody");
+const bookingImportModalClose = document.getElementById("bookingImportModalClose");
 
 let session = null;
 let sharedGuideIds = new Set();
@@ -79,6 +82,148 @@ async function refreshDraftsAfterImportCheck() {
 function closeMenu() {
   avatarDropdown?.classList.remove("open");
   avatarButton?.setAttribute("aria-expanded", "false");
+}
+
+function closeBookingImportModal() {
+  bookingImportModal?.classList.remove("open");
+  bookingImportModal?.setAttribute("aria-hidden", "true");
+  clearChildren(bookingImportModalBody);
+}
+
+function createEmailPanel(draft) {
+  const right = document.createElement("div");
+  right.className = "booking-import-panel";
+  right.style.display = "none";
+
+  if (draft.raw_html) {
+    const previewFrame = document.createElement("iframe");
+    previewFrame.className = "booking-import-preview";
+    previewFrame.setAttribute("sandbox", "");
+    previewFrame.srcdoc = draft.raw_html;
+    right.appendChild(previewFrame);
+  } else {
+    const raw = document.createElement("pre");
+    raw.className = "booking-import-raw";
+    raw.textContent = draft.raw_text || "";
+    right.appendChild(raw);
+  }
+
+  return right;
+}
+
+function createDraftCard(draft, options = {}) {
+  const readOnly = Boolean(options.readOnly);
+  const card = document.createElement("div");
+  card.className = "details booking-import-card";
+
+  const title = document.createElement("div");
+  title.className = "details-title";
+  title.textContent = draft.subject || "Imported email";
+  card.appendChild(title);
+
+  const meta = document.createElement("div");
+  meta.className = "muted";
+  meta.textContent = `${draft.from_email || "Unknown sender"} · ${formatShortDate(draft.received_at || draft.created_at)}`;
+  card.appendChild(meta);
+
+  const matchedTour = toursById.get(draft.matched_tour_id);
+  const matchLine = document.createElement("div");
+  matchLine.className = "readme-line";
+  matchLine.textContent = `Matched tour: ${formatTourLabel(matchedTour)}`;
+  card.appendChild(matchLine);
+
+  const left = document.createElement("div");
+  left.className = "booking-import-panel";
+  const leftTitle = document.createElement("div");
+  leftTitle.className = "details-title";
+  leftTitle.textContent = "Proposed import";
+  left.appendChild(leftTitle);
+
+  const leftPlatformLine = document.createElement("div");
+  leftPlatformLine.className = "readme-line";
+  leftPlatformLine.textContent = `Platform: ${draft.matched_platform_name || draft.llm_extraction?.platform_name || "Unknown"}`;
+  left.appendChild(leftPlatformLine);
+
+  const participants = Array.isArray(draft.imported_participants) ? draft.imported_participants : [];
+  const participantsText = document.createElement("div");
+  participantsText.className = "readme-line";
+  participantsText.textContent = participants.length
+    ? participants.map((participant) => `${participant.name} (${participant.group_size})`).join(" · ")
+    : "No participants proposed.";
+  left.appendChild(participantsText);
+
+  card.appendChild(left);
+
+  const toggleEmailBtn = document.createElement("button");
+  toggleEmailBtn.type = "button";
+  toggleEmailBtn.className = "ghost";
+  toggleEmailBtn.textContent = "Show email";
+  card.appendChild(toggleEmailBtn);
+
+  const right = createEmailPanel(draft);
+  toggleEmailBtn.addEventListener("click", () => {
+    const shouldShow = right.style.display === "none";
+    right.style.display = shouldShow ? "grid" : "none";
+    toggleEmailBtn.textContent = shouldShow ? "Hide email" : "Show email";
+  });
+  card.appendChild(right);
+
+  if (draft.error_message) {
+    const errorLine = document.createElement("div");
+    errorLine.className = "muted";
+    errorLine.textContent = draft.error_message;
+    card.appendChild(errorLine);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "form-row";
+
+  if (readOnly) {
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "ghost";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", closeBookingImportModal);
+    actions.appendChild(closeBtn);
+  } else {
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "primary";
+    confirmBtn.textContent = "Confirm import";
+    confirmBtn.disabled = !draft.matched_tour_id || participants.length === 0;
+    confirmBtn.addEventListener("click", async () => {
+      const ok = await reviewDraft(draft.id, "confirm");
+      if (ok) {
+        setStatus("Import confirmed.");
+        await loadDrafts();
+      }
+    });
+    actions.appendChild(confirmBtn);
+
+    const rejectBtn = document.createElement("button");
+    rejectBtn.type = "button";
+    rejectBtn.className = "ghost danger";
+    rejectBtn.textContent = "Reject";
+    rejectBtn.addEventListener("click", async () => {
+      const ok = await reviewDraft(draft.id, "reject");
+      if (ok) {
+        setStatus("Import rejected.");
+        await loadDrafts();
+      }
+    });
+    actions.appendChild(rejectBtn);
+  }
+
+  card.appendChild(actions);
+  return card;
+}
+
+function openBookingImportModal(draft) {
+  if (!bookingImportModal || !bookingImportModalBody) return;
+  clearChildren(bookingImportModalBody);
+  bookingImportModalBody.appendChild(createDraftCard(draft, { readOnly: true }));
+  bookingImportModal.classList.add("open");
+  bookingImportModal.setAttribute("aria-hidden", "false");
 }
 
 async function refreshShareInviteIndicators() {
@@ -263,116 +408,7 @@ async function loadDrafts(options = {}) {
   }
 
   drafts.forEach((draft) => {
-    const card = document.createElement("div");
-    card.className = "details booking-import-card";
-
-    const title = document.createElement("div");
-    title.className = "details-title";
-    title.textContent = draft.subject || "Imported email";
-    card.appendChild(title);
-
-    const meta = document.createElement("div");
-    meta.className = "muted";
-    meta.textContent = `${draft.from_email || "Unknown sender"} · ${formatShortDate(draft.received_at || draft.created_at)}`;
-    card.appendChild(meta);
-
-    const matchedTour = toursById.get(draft.matched_tour_id);
-    const matchLine = document.createElement("div");
-    matchLine.className = "readme-line";
-    matchLine.textContent = `Matched tour: ${formatTourLabel(matchedTour)}`;
-    card.appendChild(matchLine);
-
-    const left = document.createElement("div");
-    left.className = "booking-import-panel";
-    const leftTitle = document.createElement("div");
-    leftTitle.className = "details-title";
-    leftTitle.textContent = "Proposed import";
-    left.appendChild(leftTitle);
-
-    const leftPlatformLine = document.createElement("div");
-    leftPlatformLine.className = "readme-line";
-    leftPlatformLine.textContent = `Platform: ${draft.matched_platform_name || draft.llm_extraction?.platform_name || "Unknown"}`;
-    left.appendChild(leftPlatformLine);
-
-    const participants = Array.isArray(draft.imported_participants) ? draft.imported_participants : [];
-    const participantsText = document.createElement("div");
-    participantsText.className = "readme-line";
-    participantsText.textContent = participants.length
-      ? participants.map((participant) => `${participant.name} (${participant.group_size})`).join(" · ")
-      : "No participants proposed.";
-    left.appendChild(participantsText);
-
-    const toggleEmailBtn = document.createElement("button");
-    toggleEmailBtn.type = "button";
-    toggleEmailBtn.className = "ghost";
-    toggleEmailBtn.textContent = "Show email";
-    card.appendChild(toggleEmailBtn);
-
-    const right = document.createElement("div");
-    right.className = "booking-import-panel";
-    right.style.display = "none";
-
-    if (draft.raw_html) {
-      const previewFrame = document.createElement("iframe");
-      previewFrame.className = "booking-import-preview";
-      previewFrame.setAttribute("sandbox", "");
-      previewFrame.srcdoc = draft.raw_html;
-      right.appendChild(previewFrame);
-    } else {
-      const raw = document.createElement("pre");
-      raw.className = "booking-import-raw";
-      raw.textContent = draft.raw_text || "";
-      right.appendChild(raw);
-    }
-
-    toggleEmailBtn.addEventListener("click", () => {
-      const shouldShow = right.style.display === "none";
-      right.style.display = shouldShow ? "grid" : "none";
-      toggleEmailBtn.textContent = shouldShow ? "Hide email" : "Show email";
-    });
-
-    card.appendChild(left);
-    card.appendChild(right);
-
-    if (draft.error_message) {
-      const errorLine = document.createElement("div");
-      errorLine.className = "muted";
-      errorLine.textContent = draft.error_message;
-      card.appendChild(errorLine);
-    }
-
-    const actions = document.createElement("div");
-    actions.className = "form-row";
-
-    const confirmBtn = document.createElement("button");
-    confirmBtn.type = "button";
-    confirmBtn.className = "primary";
-    confirmBtn.textContent = "Confirm import";
-    confirmBtn.disabled = !draft.matched_tour_id || participants.length === 0;
-    confirmBtn.addEventListener("click", async () => {
-      const ok = await reviewDraft(draft.id, "confirm");
-      if (ok) {
-        setStatus("Import confirmed.");
-        await loadDrafts();
-      }
-    });
-    actions.appendChild(confirmBtn);
-
-    const rejectBtn = document.createElement("button");
-    rejectBtn.type = "button";
-    rejectBtn.className = "ghost danger";
-    rejectBtn.textContent = "Reject";
-    rejectBtn.addEventListener("click", async () => {
-      const ok = await reviewDraft(draft.id, "reject");
-      if (ok) {
-        setStatus("Import rejected.");
-        await loadDrafts();
-      }
-    });
-    actions.appendChild(rejectBtn);
-
-    card.appendChild(actions);
-    bookingImportsList.appendChild(card);
+    bookingImportsList.appendChild(createDraftCard(draft));
   });
 
   if (!historyRows.length) {
@@ -383,8 +419,10 @@ async function loadDrafts(options = {}) {
   }
 
   historyRows.forEach((draft) => {
-    const row = document.createElement("div");
+    const row = document.createElement("button");
+    row.type = "button";
     row.className = `booking-import-confirmed ${draft.status === "rejected" ? "rejected" : "confirmed"}`;
+    row.addEventListener("click", () => openBookingImportModal(draft));
 
     const matchedTour = toursById.get(draft.matched_tour_id);
     const participants = Array.isArray(draft.imported_participants) ? draft.imported_participants : [];
@@ -444,6 +482,11 @@ document.addEventListener("click", (event) => {
   if (!avatarDropdown || !avatarButton) return;
   if (avatarDropdown.contains(event.target) || avatarButton.contains(event.target)) return;
   closeMenu();
+});
+
+bookingImportModalClose?.addEventListener("click", closeBookingImportModal);
+bookingImportModal?.addEventListener("click", (event) => {
+  if (event.target?.dataset?.close === "true") closeBookingImportModal();
 });
 
 checkNewEmailsBtn?.addEventListener("click", checkNewEmails);

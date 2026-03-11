@@ -752,10 +752,14 @@ h1 {
 .booking-import-confirmed {
   display: grid;
   gap: 4px;
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid rgba(0, 128, 0, 0.18);
   border-radius: 12px;
   background: #dff4df;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
 }
 
 .booking-import-confirmed.rejected {
