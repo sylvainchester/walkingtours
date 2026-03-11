@@ -708,6 +708,7 @@ module.exports = async (req, res) => {
       || String(req.query?.use_llm || req.body?.use_llm || "").toLowerCase() === "true";
     const debug = String(req.query?.debug || req.body?.debug || "").toLowerCase() === "1"
       || String(req.query?.debug || req.body?.debug || "").toLowerCase() === "true";
+    const gmailId = String(req.query?.gmail_id || req.body?.gmail_id || "").trim();
     const tokenAuthorized = Boolean(expectedToken) && providedToken === expectedToken;
     const userId = tokenAuthorized ? null : await verifyUserId(req);
     if (!tokenAuthorized && !userId) {
@@ -756,6 +757,169 @@ module.exports = async (req, res) => {
         gmail_address: profileRes.data.emailAddress || null,
         unread_count: messagesRes.data.resultSizeEstimate || 0,
         messages: previews,
+      });
+    }
+
+    if (gmailId) {
+      const [fullMessage, toursRes, tourTypesRes, profilesRes, shareRowsRes] = await Promise.all([
+        gmail.users.messages.get({
+          userId: "me",
+          id: gmailId,
+          format: "full",
+        }),
+        supabase
+          .from("tours")
+          .select("id,date,start_time,end_time,type,platform,guide_id,status,participants_locked")
+          .gte("date", nowIso)
+          .order("date")
+          .order("start_time"),
+        supabase
+          .from("tour_types")
+          .select("guide_id,name,platforms")
+          .order("name"),
+        supabase
+          .from("guide_profiles")
+          .select("id,email,import_email,import_email_2"),
+        supabase
+          .from("guide_shares")
+          .select("guide_id,shared_with_id"),
+      ]);
+
+      if (toursRes.error) throw new Error(toursRes.error.message);
+      if (tourTypesRes.error) throw new Error(tourTypesRes.error.message);
+      let profilesData = profilesRes.data || [];
+      if (profilesRes.error && isMissingImportEmailColumn(profilesRes.error)) {
+        const fallbackProfilesRes = await supabase
+          .from("guide_profiles")
+          .select("id,email,import_email");
+        if (fallbackProfilesRes.error) throw new Error(fallbackProfilesRes.error.message);
+        profilesData = (fallbackProfilesRes.data || []).map((profile) => ({
+          ...profile,
+          import_email_2: null,
+        }));
+      }
+      if (profilesRes.error && isMissingImportEmailColumn(profilesRes.error)) {
+        const fallbackProfilesRes = await supabase
+          .from("guide_profiles")
+          .select("id,email");
+        if (fallbackProfilesRes.error) throw new Error(fallbackProfilesRes.error.message);
+        profilesData = (fallbackProfilesRes.data || []).map((profile) => ({
+          ...profile,
+          import_email: null,
+          import_email_2: null,
+        }));
+      } else if (profilesRes.error) {
+        throw new Error(profilesRes.error.message);
+      }
+      if (shareRowsRes.error) throw new Error(shareRowsRes.error.message);
+
+      const headers = new Map(
+        (fullMessage.data.payload?.headers || []).map((header) => [header.name.toLowerCase(), header.value || ""])
+      );
+      const parts = collectBodyParts(fullMessage.data.payload);
+      const subject = headers.get("subject") || "";
+      const fromEmail = normalizeEmail(extractEmail(headers.get("from")));
+      const receivedAt = parseHeaderDate(headers.get("date"));
+      const rawText = buildMessageText(subject, parts);
+      const rawHtml = parts.html.join("\n\n").trim();
+
+      const guideByEmail = new Map(
+        profilesData.flatMap((profile) => {
+          const keys = new Set([
+            normalizeEmail(profile.email),
+            normalizeEmail(profile.import_email),
+            normalizeEmail(profile.import_email_2),
+          ]);
+          return Array.from(keys)
+            .filter(Boolean)
+            .map((key) => [key, profile]);
+        })
+      );
+      const sharedGuideIdsByGuideId = new Map(
+        profilesData.map((profile) => [
+          profile.id,
+          buildSharedGuideIds(shareRowsRes.data || [], profile.id),
+        ])
+      );
+
+      const senderGuide = guideByEmail.get(fromEmail) || null;
+      const allowedGuideIds = senderGuide
+        ? (sharedGuideIdsByGuideId.get(senderGuide.id) || [senderGuide.id])
+        : [];
+      const candidateTours = (toursRes.data || []).filter((tour) => allowedGuideIds.includes(tour.guide_id));
+      const candidateTourTypes = (tourTypesRes.data || []).filter((tourType) => allowedGuideIds.includes(tourType.guide_id));
+
+      const extractedParticipants = extractParticipants(rawText);
+      let llmExtraction = null;
+      if (useLlm) {
+        try {
+          llmExtraction = await extractWithLLM({ subject, rawText });
+        } catch (error) {
+          llmExtraction = { error: error.message };
+        }
+      }
+
+      const parsedLlm = llmExtraction?.parsed || null;
+      const llmParticipants = parsedLlm?.participants
+        ?.filter((participant) => participant && participant.group_size > 0)
+        .map((participant) => ({
+          name: String(participant.name || parsedLlm.booking_name || "").trim(),
+          group_size: Number(participant.group_size),
+        }))
+        .filter((participant) => participant.name)
+        || [];
+      const effectiveParticipants = useLlm && llmParticipants.length ? llmParticipants : extractedParticipants;
+      const heuristicMatch = senderGuide
+        ? matchTour({
+            text: rawText,
+            subject,
+            tours: candidateTours,
+            tourTypes: candidateTourTypes,
+          })
+        : {
+            matchedTour: null,
+            matchedPlatform: null,
+            matchedType: null,
+            dates: [],
+            times: [],
+            ambiguityCount: 0,
+          };
+      const llmMatch = senderGuide && parsedLlm
+        ? matchTourFromLLM(parsedLlm, candidateTours, candidateTourTypes)
+        : null;
+      const chosenMatch = senderGuide
+        ? (useLlm && parsedLlm ? llmMatch : heuristicMatch)
+        : null;
+
+      return json(res, 200, {
+        ok: true,
+        gmail_id: fullMessage.data.id,
+        gmail_thread_id: fullMessage.data.threadId || null,
+        subject,
+        from_email: fromEmail || null,
+        received_at: receivedAt,
+        sender_guide_id: senderGuide?.id || null,
+        allowed_guide_ids: allowedGuideIds,
+        parsed_dates: extractPriorityDates(rawText, subject),
+        parsed_times: parseTimes(rawText),
+        heuristic_participants: extractedParticipants,
+        effective_participants: effectiveParticipants,
+        llm_extraction: llmExtraction ? {
+          model: llmExtraction.model,
+          parsed: llmExtraction.parsed,
+          error: llmExtraction.error || null,
+        } : null,
+        heuristic_match: heuristicMatch,
+        llm_match: llmMatch,
+        chosen_match: chosenMatch,
+        candidate_tours: candidateTours,
+        candidate_tour_types: candidateTourTypes.map((tourType) => ({
+          guide_id: tourType.guide_id,
+          name: tourType.name,
+          platforms: tourType.platforms || [],
+        })),
+        raw_text_preview: rawText.slice(0, 3000),
+        raw_html_present: Boolean(rawHtml),
       });
     }
 
