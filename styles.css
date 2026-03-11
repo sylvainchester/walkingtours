@@ -758,6 +758,11 @@ h1 {
   background: #dff4df;
 }
 
+.booking-import-confirmed.rejected {
+  border-color: rgba(180, 56, 24, 0.24);
+  background: #fbe3da;
+}
+
 .booking-import-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

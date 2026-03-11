@@ -238,7 +238,7 @@ async function loadDrafts(options = {}) {
   const { data, error } = await supabase
     .from("incoming_booking_emails")
     .select("id,subject,from_email,received_at,raw_text,raw_html,matched_tour_id,matched_platform_name,imported_participants,llm_extraction,status,error_message,created_at")
-    .in("status", ["pending_review", "error", "ignored", "confirmed"])
+    .in("status", ["pending_review", "error", "ignored", "confirmed", "rejected"])
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -253,8 +253,8 @@ async function loadDrafts(options = {}) {
     if (!tour) return true;
     return sharedGuideIds.has(tour.guide_id);
   });
-  const drafts = visibleRows.filter((draft) => draft.status !== "confirmed");
-  const confirmedRows = visibleRows.filter((draft) => draft.status === "confirmed");
+  const drafts = visibleRows.filter((draft) => !["confirmed", "rejected"].includes(draft.status));
+  const historyRows = visibleRows.filter((draft) => ["confirmed", "rejected"].includes(draft.status));
 
   if (!drafts.length) {
     const empty = document.createElement("div");
@@ -375,16 +375,16 @@ async function loadDrafts(options = {}) {
     bookingImportsList.appendChild(card);
   });
 
-  if (!confirmedRows.length) {
+  if (!historyRows.length) {
     const emptyConfirmed = document.createElement("div");
-    emptyConfirmed.textContent = "No confirmed imports yet.";
+    emptyConfirmed.textContent = "No import history yet.";
     confirmedBookingImportsList.appendChild(emptyConfirmed);
     return;
   }
 
-  confirmedRows.forEach((draft) => {
+  historyRows.forEach((draft) => {
     const row = document.createElement("div");
-    row.className = "booking-import-confirmed";
+    row.className = `booking-import-confirmed ${draft.status === "rejected" ? "rejected" : "confirmed"}`;
 
     const matchedTour = toursById.get(draft.matched_tour_id);
     const participants = Array.isArray(draft.imported_participants) ? draft.imported_participants : [];
@@ -399,8 +399,15 @@ async function loadDrafts(options = {}) {
 
     const line2 = document.createElement("div");
     line2.className = "muted";
-    line2.textContent = `${formatTourLabel(matchedTour)} · ${draft.matched_platform_name || draft.llm_extraction?.platform_name || "Unknown"} · ${participantsCount} participants`;
+    line2.textContent = `${draft.status === "rejected" ? "Rejected" : "Confirmed"} · ${formatTourLabel(matchedTour)} · ${draft.matched_platform_name || draft.llm_extraction?.platform_name || "Unknown"} · ${participantsCount} participants`;
     row.appendChild(line2);
+
+    if (draft.status === "rejected" && draft.error_message) {
+      const line3 = document.createElement("div");
+      line3.className = "muted";
+      line3.textContent = draft.error_message;
+      row.appendChild(line3);
+    }
 
     confirmedBookingImportsList.appendChild(row);
   });
