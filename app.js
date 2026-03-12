@@ -36,14 +36,51 @@ let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
 let shareValidationByGuideId = new Map();
 let unavailableDates = new Set();
+let monthUnavailableGuideIdsByDate = new Map();
 let selectedGuideId = null;
-let showAllTours = false;
+let showAllTours = true;
 let modalOpenTourId = null;
 let tourTypes = [];
 let html2pdfLoader = null;
 let ocrBusy = false;
 let viewerColorMode = "auto";
 let viewerGuideColorOverrides = {};
+let showDetailsRequestId = 0;
+let loadMonthToursRequestId = 0;
+const RESTORE_STATE_KEY = "walkingtours-restore-state";
+
+function persistViewState() {
+  try {
+    sessionStorage.setItem(
+      RESTORE_STATE_KEY,
+      JSON.stringify({
+        viewYear,
+        viewMonth,
+        selectedDate,
+      })
+    );
+  } catch (_error) {
+    // Ignore storage failures.
+  }
+}
+
+function restoreViewState() {
+  try {
+    const raw = sessionStorage.getItem(RESTORE_STATE_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(RESTORE_STATE_KEY);
+    const parsed = JSON.parse(raw);
+    if (Number.isInteger(parsed?.viewYear)) viewYear = parsed.viewYear;
+    if (Number.isInteger(parsed?.viewMonth) && parsed.viewMonth >= 0 && parsed.viewMonth <= 11) {
+      viewMonth = parsed.viewMonth;
+    }
+    if (typeof parsed?.selectedDate === "string" && parsed.selectedDate) {
+      selectedDate = parsed.selectedDate;
+    }
+  } catch (_error) {
+    // Ignore storage failures.
+  }
+}
 
 const GUIDE_COLOR_CLASSES = [
   "guide-color-1",
@@ -200,7 +237,7 @@ async function loadGuideProfileById(guideId) {
 async function loadTourTypeForTour(tour) {
   const { data } = await supabase
     .from("tour_types")
-    .select("name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address,platforms")
+    .select("guide_id,name,shareable,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address,platforms")
     .eq("guide_id", tour.guide_id)
     .eq("name", tour.type)
     .maybeSingle();
@@ -209,7 +246,7 @@ async function loadTourTypeForTour(tour) {
   // Fallback: some existing tours may reference a shared type name owned by another guide.
   const { data: byName } = await supabase
     .from("tour_types")
-    .select("guide_id,name,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address,platforms")
+    .select("guide_id,name,shareable,payment_type,ticket_price,commission_percent,fee_per_participant,invoice_org_name,invoice_org_address,platforms")
     .ilike("name", tour.type);
   if (!byName || byName.length === 0) return null;
 
@@ -369,8 +406,11 @@ function toggleMenu() {
   }
 }
 
-function isPrivateForViewer(tour) {
-  return Boolean(tour?.is_private) && tour?.guide_id !== session?.user?.id;
+function isPrivateForViewer(tour, typeForTour = null) {
+  const resolvedIsPrivate = typeForTour && typeof typeForTour.shareable === "boolean"
+    ? typeForTour.shareable === false
+    : Boolean(tour?.is_private);
+  return resolvedIsPrivate && tour?.guide_id !== session?.user?.id;
 }
 
 async function loadSharedGuides() {
@@ -509,6 +549,12 @@ function getGuideColorValue(guideId) {
   return colorMap[colorClass] || colorMap["guide-color-1"];
 }
 
+function sendPushInBackground(payload) {
+  Promise.resolve(sendPush(supabase, payload)).catch((error) => {
+    console.error("push background error", error);
+  });
+}
+
 function updateGuideFilterColor() {
   if (!guideFilter) return;
   guideFilter.style.color = getGuideColorValue(selectedGuideId);
@@ -530,47 +576,74 @@ function getVisibleToursForDate(iso) {
   return allTours.filter((tour) => tour.guide_id === selectedGuideId);
 }
 
+function getAvailableGuideIdsForDate(iso) {
+  const unavailableGuideIds = monthUnavailableGuideIdsByDate.get(iso) || new Set();
+  return new Set(
+    Array.from(sharedGuideIds).filter((guideId) => !unavailableGuideIds.has(guideId))
+  );
+}
+
 async function loadAvailabilityForSelectedGuide() {
   unavailableDates = new Set();
   if (!session || !selectedGuideId) return;
-  const { start, end } = getMonthRange(viewYear, viewMonth);
-  const { data } = await supabase
-    .from("guide_availability")
-    .select("date")
-    .eq("guide_id", selectedGuideId)
-    .gte("date", start)
-    .lte("date", end)
-    .eq("available", false);
-  if (data) data.forEach((row) => unavailableDates.add(row.date));
+  monthUnavailableGuideIdsByDate.forEach((guideIds, date) => {
+    if (guideIds.has(selectedGuideId)) unavailableDates.add(date);
+  });
 }
 
 async function loadMonthTours() {
+  const requestId = ++loadMonthToursRequestId;
+  const targetYear = viewYear;
+  const targetMonth = viewMonth;
   toursByDate = new Map();
+  monthUnavailableGuideIdsByDate = new Map();
   if (!session) {
     renderCalendar();
-    if (selectedDate) showDetails(selectedDate);
+    if (selectedDate) void showDetails(selectedDate);
     return;
   }
 
   await loadSharedGuides();
+  if (requestId !== loadMonthToursRequestId) return;
   await loadTourTypes();
-  await loadAvailabilityForSelectedGuide();
+  if (requestId !== loadMonthToursRequestId) return;
   const guideIds = Array.from(sharedGuideIds);
 
-  const { start, end } = getMonthRange(viewYear, viewMonth);
-  const { data, error } = await supabase
-    .from("tours")
-    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
-    .gte("date", start)
-    .lte("date", end)
-    .in("guide_id", guideIds)
-    .order("date")
-    .order("start_time");
+  const { start, end } = getMonthRange(targetYear, targetMonth);
+  const [toursResponse, availabilityResponse] = await Promise.all([
+    supabase
+      .from("tours")
+      .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
+      .gte("date", start)
+      .lte("date", end)
+      .in("guide_id", guideIds)
+      .order("date")
+      .order("start_time"),
+    supabase
+      .from("guide_availability")
+      .select("guide_id,date")
+      .in("guide_id", guideIds)
+      .gte("date", start)
+      .lte("date", end)
+      .eq("available", false),
+  ]);
+  const { data, error } = toursResponse;
 
+  if (requestId !== loadMonthToursRequestId) return;
   if (error) {
     renderCalendar();
     return;
   }
+
+  if (availabilityResponse.data) {
+    availabilityResponse.data.forEach((row) => {
+      const setForDate = monthUnavailableGuideIdsByDate.get(row.date) || new Set();
+      setForDate.add(row.guide_id);
+      monthUnavailableGuideIdsByDate.set(row.date, setForDate);
+    });
+  }
+  await loadAvailabilityForSelectedGuide();
+  if (requestId !== loadMonthToursRequestId) return;
 
   data.forEach((tour) => {
     const list = toursByDate.get(tour.date) || [];
@@ -578,8 +651,9 @@ async function loadMonthTours() {
     toursByDate.set(tour.date, list);
   });
 
+  if (requestId !== loadMonthToursRequestId) return;
   renderCalendar();
-  if (selectedDate) showDetails(selectedDate);
+  if (selectedDate) void showDetails(selectedDate);
   if (modalOpenTourId) {
     const tour = findTourById(modalOpenTourId);
     if (tour) openTourModal(tour);
@@ -658,10 +732,10 @@ function renderCalendar() {
       cell.appendChild(indicator);
     }
 
-    cell.addEventListener("click", () => {
+    cell.addEventListener("click", async () => {
       selectedDate = iso;
       renderCalendar();
-      showDetails(iso);
+      await showDetails(iso);
     });
 
     calendarGrid.appendChild(cell);
@@ -704,14 +778,22 @@ function findTourById(id) {
 
 function closeTourModal() {
   if (!tourModal) return;
+  const activeElement = document.activeElement;
+  if (activeElement && tourModal.contains(activeElement) && typeof activeElement.blur === "function") {
+    activeElement.blur();
+  }
   tourModal.classList.remove("open");
   tourModal.setAttribute("aria-hidden", "true");
+  tourModal.hidden = true;
+  tourModal.inert = true;
   modalOpenTourId = null;
 }
 
 async function openTourModal(tour) {
   if (!tourModal || !modalBody) return;
   modalOpenTourId = tour.id;
+  tourModal.hidden = false;
+  tourModal.inert = false;
   tourModal.classList.add("open");
   tourModal.setAttribute("aria-hidden", "false");
   await renderTourModal(tour);
@@ -725,10 +807,12 @@ async function renderTourModal(tour) {
     ? `${profile.first_name} ${profile.last_name}`
     : "Unknown";
   const isPast = tour.date < getTodayISO();
-  const isPrivate = isPrivateForViewer(tour);
-
   const headerRow = document.createElement("div");
   headerRow.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}`;
+  const typeForTour = tourTypes.find((t) => t.guide_id === tour.guide_id && t.name === tour.type)
+    || await loadTourTypeForTour(tour)
+    || null;
+  const isPrivate = isPrivateForViewer(tour, typeForTour);
   headerRow.textContent = `${formatShortDateNoYear(tour.date)} · ${(tour.start_time || "").slice(0, 5)} - ${(tour.end_time || "").slice(0, 5)} · ${guideName} · ${isPrivate ? "Private tour" : tour.type}`;
   modalBody.appendChild(headerRow);
 
@@ -739,9 +823,6 @@ async function renderTourModal(tour) {
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isLocked && !isPrivate;
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
   const canEditTourGuide = Boolean(session) && !isPast && !isLocked && !isPrivate && (isOwner || isCreator);
-  const typeForTour = tourTypes.find((t) => t.guide_id === tour.guide_id && t.name === tour.type)
-    || await loadTourTypeForTour(tour)
-    || null;
   const platformForTour = tour.platform || getPlatformsForType(typeForTour)[0] || null;
   const participantPlatforms = getPlatformsForType(typeForTour);
   const isFreeTour = typeForTour?.payment_type === "free" || /free/i.test(String(tour.type || ""));
@@ -793,67 +874,84 @@ async function renderTourModal(tour) {
     saveGuideBtn.className = "ghost";
     saveGuideBtn.textContent = "Save guide";
     saveGuideBtn.addEventListener("click", async () => {
+      if (saveGuideBtn.disabled) return;
       const nextGuideId = guideSelect.value;
       if (!nextGuideId || nextGuideId === tour.guide_id) return;
+      saveGuideBtn.disabled = true;
 
-      const validationRequired = nextGuideId === session.user.id
-        ? false
-        : (shareValidationByGuideId.get(nextGuideId) ?? true);
-      const nextStatus = nextGuideId === session.user.id || !validationRequired ? "accepted" : "pending";
+      try {
+        const validationRequired = nextGuideId === session.user.id
+          ? false
+          : (shareValidationByGuideId.get(nextGuideId) ?? true);
+        const nextStatus = nextGuideId === session.user.id || !validationRequired ? "accepted" : "pending";
 
-      const { data: conflicts, error: conflictError } = await supabase
-        .from("tours")
-        .select("id")
-        .eq("guide_id", nextGuideId)
-        .eq("date", tour.date)
-        .neq("id", tour.id)
-        .lte("start_time", tour.end_time)
-        .gte("end_time", tour.start_time);
-      if (conflictError) {
-        alert(`Conflict check error: ${conflictError.message}`);
-        return;
+        const { data: conflicts, error: conflictError } = await supabase
+          .from("tours")
+          .select("id")
+          .eq("guide_id", nextGuideId)
+          .eq("date", tour.date)
+          .neq("id", tour.id)
+          .lte("start_time", tour.end_time)
+          .gte("end_time", tour.start_time);
+        if (conflictError) {
+          alert(`Conflict check error: ${conflictError.message}`);
+          return;
+        }
+        if (conflicts && conflicts.length > 0) {
+          alert("This guide already has another tour at the same time.");
+          return;
+        }
+
+        const previousGuideId = tour.guide_id;
+        const previousGuideName = guideName;
+        const nextGuideProfile = sharedGuideProfiles.get(nextGuideId);
+        const nextGuideName = nextGuideProfile
+          ? `${nextGuideProfile.first_name} ${nextGuideProfile.last_name}`
+          : "Unknown";
+        const updatePayload = {
+          guide_id: nextGuideId,
+          status: nextStatus,
+        };
+
+        const { data: updatedTour, error } = await supabase
+          .from("tours")
+          .update(updatePayload)
+          .eq("id", tour.id)
+          .select("id,guide_id,status")
+          .single();
+        if (error) {
+          alert(`Guide update error: ${error.message}`);
+          return;
+        }
+
+        tour.guide_id = updatedTour?.guide_id || nextGuideId;
+        tour.status = updatedTour?.status || nextStatus;
+        selectedDate = tour.date;
+
+        if (previousGuideId !== session.user.id) {
+          sendPushInBackground({
+            to_user_id: previousGuideId,
+            title: "Tour reassigned",
+            body: `A tour on ${tour.date} is no longer assigned to you.`,
+            data: { url: "./index.html" },
+          });
+        }
+        if (nextGuideId !== session.user.id) {
+          sendPushInBackground({
+            to_user_id: nextGuideId,
+            title: nextStatus === "pending" ? "Tour reassignment pending" : "Tour reassigned",
+            body: nextStatus === "pending"
+              ? `${previousGuideName} reassigned a tour to you on ${tour.date}.`
+              : `${previousGuideName} reassigned a tour to ${nextGuideName === previousGuideName ? "you" : nextGuideName} on ${tour.date}.`,
+            data: { url: "./index.html" },
+          });
+        }
+
+        persistViewState();
+        window.location.reload();
+      } finally {
+        saveGuideBtn.disabled = false;
       }
-      if (conflicts && conflicts.length > 0) {
-        alert("This guide already has another tour at the same time.");
-        return;
-      }
-
-      const previousGuideId = tour.guide_id;
-      const previousGuideName = guideName;
-      const nextGuideProfile = sharedGuideProfiles.get(nextGuideId);
-      const nextGuideName = nextGuideProfile
-        ? `${nextGuideProfile.first_name} ${nextGuideProfile.last_name}`
-        : "Unknown";
-
-      const { error } = await supabase
-        .from("tours")
-        .update({ guide_id: nextGuideId, status: nextStatus })
-        .eq("id", tour.id);
-      if (error) {
-        alert(`Guide update error: ${error.message}`);
-        return;
-      }
-
-      if (previousGuideId !== session.user.id) {
-        await sendPush(supabase, {
-          to_user_id: previousGuideId,
-          title: "Tour reassigned",
-          body: `A tour on ${tour.date} is no longer assigned to you.`,
-          data: { url: "./index.html" },
-        });
-      }
-      if (nextGuideId !== session.user.id) {
-        await sendPush(supabase, {
-          to_user_id: nextGuideId,
-          title: nextStatus === "pending" ? "Tour reassignment pending" : "Tour reassigned",
-          body: nextStatus === "pending"
-            ? `${previousGuideName} reassigned a tour to you on ${tour.date}.`
-            : `${previousGuideName} reassigned a tour to ${nextGuideName === previousGuideName ? "you" : nextGuideName} on ${tour.date}.`,
-          data: { url: "./index.html" },
-        });
-      }
-
-      await loadMonthTours();
     });
     guideRow.appendChild(saveGuideBtn);
     modalBody.appendChild(guideRow);
@@ -892,7 +990,7 @@ async function renderTourModal(tour) {
           ? deleted.created_by
           : null;
     if (notifyTarget) {
-      await sendPush(supabase, {
+      sendPushInBackground({
         to_user_id: notifyTarget,
         title: "Tour removed",
         body: `A planned tour on ${deleted.date} was deleted.`,
@@ -900,7 +998,9 @@ async function renderTourModal(tour) {
       });
     }
     closeTourModal();
-    await loadMonthTours();
+    selectedDate = deleted.date;
+    persistViewState();
+    window.location.reload();
   };
 
   if (tour.status === "pending" && isOwner) {
@@ -1424,7 +1524,9 @@ function renderTourItem(tour) {
 }
 
 async function showDetails(iso) {
+  const requestId = ++showDetailsRequestId;
   clearChildren(detailsContent);
+  detailsContent.scrollTop = 0;
 
   const title = document.createElement("div");
   title.className = "details-title";
@@ -1447,171 +1549,173 @@ async function showDetails(iso) {
     return;
   }
 
-  const tours = getVisibleToursForDate(iso);
+  try {
+    const tours = getVisibleToursForDate(iso);
 
-  const todayISO = getTodayISO();
-  const isPastDate = iso < todayISO;
+    const todayISO = getTodayISO();
+    const isPastDate = iso < todayISO;
 
-  const createCard = document.createElement("div");
-  createCard.className = "card";
+    const createCard = document.createElement("div");
+    createCard.className = "card";
 
-  const createTitle = document.createElement("div");
-  createTitle.className = "details-title";
-  createTitle.textContent = "Create Tour";
+    const createTitle = document.createElement("div");
+    createTitle.className = "details-title";
+    createTitle.textContent = "Create Tour";
 
-  const createForm = document.createElement("div");
-  createForm.className = "form-row";
+    const createForm = document.createElement("div");
+    createForm.className = "form-row";
 
-  let availableGuideIds = new Set();
-  if (sharedGuideIds.size > 0) {
-    const { data: unavailableRows } = await supabase
-      .from("guide_availability")
-      .select("guide_id")
-      .in("guide_id", Array.from(sharedGuideIds))
-      .eq("date", iso)
-      .eq("available", false);
-    const unavailableGuideIds = new Set((unavailableRows || []).map((r) => r.guide_id));
-    availableGuideIds = new Set(
-      Array.from(sharedGuideIds).filter((guideId) => !unavailableGuideIds.has(guideId))
-    );
-  }
+    const availableGuideIds = getAvailableGuideIdsForDate(iso);
 
-  const guideSelect = document.createElement("select");
-  guideSelect.className = "select";
-  Array.from(sharedGuideIds).forEach((id) => {
-    if (!availableGuideIds.has(id)) return;
-    const profile = sharedGuideProfiles.get(id);
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = profile
-      ? `${profile.first_name} ${profile.last_name}`
-      : id;
-    if (session && id === session.user.id) option.selected = true;
-    guideSelect.appendChild(option);
-  });
-  const hasAvailableGuide = guideSelect.options.length > 0;
-  if (!hasAvailableGuide) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = "No guide available";
-    option.selected = true;
-    guideSelect.appendChild(option);
-    guideSelect.disabled = true;
-  }
-
-  const startInput = document.createElement("input");
-  startInput.type = "time";
-  startInput.className = "input time-input";
-  startInput.value = "10:30";
-
-  const typeSelect = createTourTypeSelect(tourTypes[0]?.id);
-
-  const addBtn = document.createElement("button");
-  addBtn.type = "button";
-  addBtn.className = "primary";
-  addBtn.textContent = "Add tour";
-  addBtn.disabled = !hasAvailableGuide;
-  addBtn.addEventListener("click", async () => {
-    if (!tourTypes.length) {
-      alert("Please create a tour type first.");
-      return;
-    }
-    if (!hasAvailableGuide) {
-      alert("No guide is available for this day.");
-      return;
-    }
-    if (!startInput.value) {
-      alert("Please fill start time.");
-      return;
-    }
-    const endValue = addMinutesToTime(startInput.value, 90);
-    const selectedGuide = guideSelect.value || session.user.id;
-    const selectedType = tourTypes.find((type) => type.id === typeSelect.value);
-    if (!selectedType) {
-      alert("Please select a tour type.");
-      return;
-    }
-    const selectedPlatform = getPlatformsForType(selectedType)[0] || null;
-    if (!selectedPlatform) {
-      alert("Please configure at least one platform for this tour type.");
-      return;
-    }
-    const needsValidation = selectedGuide === session.user.id
-      ? false
-      : shareValidationByGuideId.get(selectedGuide) !== false;
-    const status = needsValidation ? "pending" : "accepted";
-    const { data: conflicts } = await supabase
-      .from("tours")
-      .select("id,start_time,end_time,status")
-      .eq("guide_id", selectedGuide)
-      .eq("date", iso)
-      .eq("status", "accepted")
-      .lte("start_time", endValue)
-      .gte("end_time", startInput.value);
-    if (conflicts && conflicts.length > 0) {
-      alert("Time conflict with another accepted tour.");
-      return;
-    }
-    const { error } = await supabase.from("tours").insert({
-      guide_id: selectedGuide,
-      created_by: session.user.id,
-      status,
-      date: iso,
-      start_time: startInput.value,
-      end_time: endValue,
-      type: selectedType.name,
-      is_private: selectedType.shareable === false,
-      platform: selectedPlatform,
+    const guideSelect = document.createElement("select");
+    guideSelect.className = "select";
+    Array.from(sharedGuideIds).forEach((id) => {
+      if (!availableGuideIds.has(id)) return;
+      const profile = sharedGuideProfiles.get(id);
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = profile
+        ? `${profile.first_name} ${profile.last_name}`
+        : id;
+      if (session && id === session.user.id) option.selected = true;
+      guideSelect.appendChild(option);
     });
-    if (!error) {
-      if (selectedGuide !== session.user.id) {
-        await sendPush(supabase, {
-          to_user_id: selectedGuide,
-          title: needsValidation ? "New tour pending" : "New tour booked",
-          body: needsValidation
-            ? `A tour is waiting for your approval on ${iso} at ${(startInput.value || "").slice(0, 5)}.`
-            : `A new tour was booked for you on ${iso} at ${(startInput.value || "").slice(0, 5)}.`,
-          data: { url: "./index.html" },
-        });
+    const hasAvailableGuide = guideSelect.options.length > 0;
+    if (!hasAvailableGuide) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No guide available";
+      option.selected = true;
+      guideSelect.appendChild(option);
+      guideSelect.disabled = true;
+    }
+
+    const startInput = document.createElement("input");
+    startInput.type = "time";
+    startInput.className = "input time-input";
+    startInput.value = "10:30";
+
+    const typeSelect = createTourTypeSelect(tourTypes[0]?.id);
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "primary";
+    addBtn.textContent = "Add tour";
+    addBtn.disabled = !hasAvailableGuide;
+      addBtn.addEventListener("click", async () => {
+      if (!tourTypes.length) {
+        alert("Please create a tour type first.");
+        return;
       }
-      await loadMonthTours();
-    }
-  });
-
-  createForm.appendChild(startInput);
-  createForm.appendChild(typeSelect);
-  createForm.appendChild(guideSelect);
-  createForm.appendChild(addBtn);
-
-  const listCard = document.createElement("div");
-  listCard.className = "card";
-  const listTitle = document.createElement("div");
-  listTitle.className = "details-title";
-  listTitle.textContent = "Tours";
-  listCard.appendChild(listTitle);
-
-  if (!tours.length) {
-    const empty = document.createElement("div");
-    empty.textContent = "No tours scheduled.";
-    listCard.appendChild(empty);
-  } else {
-    tours.forEach((tour) => {
-      listCard.appendChild(renderTourItem(tour));
+      if (!hasAvailableGuide) {
+        alert("No guide is available for this day.");
+        return;
+      }
+      if (!startInput.value) {
+        alert("Please fill start time.");
+        return;
+      }
+      const endValue = addMinutesToTime(startInput.value, 90);
+      const selectedGuide = guideSelect.value || session.user.id;
+      const selectedType = tourTypes.find((type) => type.id === typeSelect.value);
+      if (!selectedType) {
+        alert("Please select a tour type.");
+        return;
+      }
+      const selectedPlatform = getPlatformsForType(selectedType)[0] || null;
+      if (!selectedPlatform) {
+        alert("Please configure at least one platform for this tour type.");
+        return;
+      }
+      const needsValidation = selectedGuide === session.user.id
+        ? false
+        : shareValidationByGuideId.get(selectedGuide) !== false;
+      const status = needsValidation ? "pending" : "accepted";
+      const { data: conflicts } = await supabase
+        .from("tours")
+        .select("id,start_time,end_time,status")
+        .eq("guide_id", selectedGuide)
+        .eq("date", iso)
+        .eq("status", "accepted")
+        .lte("start_time", endValue)
+        .gte("end_time", startInput.value);
+      if (conflicts && conflicts.length > 0) {
+        alert("Time conflict with another accepted tour.");
+        return;
+      }
+      const { error } = await supabase.from("tours").insert({
+        guide_id: selectedGuide,
+        created_by: session.user.id,
+        status,
+        date: iso,
+        start_time: startInput.value,
+        end_time: endValue,
+        type: selectedType.name,
+        is_private: selectedType.shareable === false,
+        platform: selectedPlatform,
+      });
+      if (!error) {
+        if (selectedGuide !== session.user.id) {
+          await sendPush(supabase, {
+            to_user_id: selectedGuide,
+            title: needsValidation ? "New tour pending" : "New tour booked",
+            body: needsValidation
+              ? `A tour is waiting for your approval on ${iso} at ${(startInput.value || "").slice(0, 5)}.`
+              : `A new tour was booked for you on ${iso} at ${(startInput.value || "").slice(0, 5)}.`,
+            data: { url: "./index.html" },
+          });
+        }
+        await loadMonthTours();
+      }
     });
-  }
 
-  detailsContent.appendChild(listCard);
+    createForm.appendChild(startInput);
+    createForm.appendChild(typeSelect);
+    createForm.appendChild(guideSelect);
+    createForm.appendChild(addBtn);
 
-  if (!isPastDate) {
-    createCard.appendChild(createTitle);
-    createCard.appendChild(createForm);
-    if (!hasAvailableGuide) {
-      const unavailableNote = document.createElement("div");
-      unavailableNote.className = "muted";
-      unavailableNote.textContent = "No available guide for this day. Update availability first.";
-      createCard.appendChild(unavailableNote);
+    const listCard = document.createElement("div");
+    listCard.className = "card";
+    const listTitle = document.createElement("div");
+    listTitle.className = "details-title";
+    listTitle.textContent = "Tours";
+    listCard.appendChild(listTitle);
+
+    if (!tours.length) {
+      const empty = document.createElement("div");
+      empty.textContent = "No tours scheduled.";
+      listCard.appendChild(empty);
+    } else {
+      tours.forEach((tour) => {
+        listCard.appendChild(renderTourItem(tour));
+      });
     }
-    detailsContent.appendChild(createCard);
+
+    detailsContent.appendChild(listCard);
+
+    if (!isPastDate) {
+      detailsContent.appendChild(createCard);
+      createCard.appendChild(createTitle);
+      createCard.appendChild(createForm);
+      if (!hasAvailableGuide) {
+        const unavailableNote = document.createElement("div");
+        unavailableNote.className = "muted";
+        unavailableNote.textContent = "No available guide for this day. Update availability first.";
+        createCard.appendChild(unavailableNote);
+      }
+    }
+  } catch (error) {
+    console.error("showDetails error", error, {
+      iso,
+      selectedDate,
+      sharedGuideIds: Array.from(sharedGuideIds || []),
+      tourTypesCount: Array.isArray(tourTypes) ? tourTypes.length : null,
+    });
+    if (requestId !== showDetailsRequestId) return;
+    const errorBox = document.createElement("div");
+    errorBox.className = "muted";
+    errorBox.textContent = `Selected day error: ${error?.message || error}`;
+    detailsContent.appendChild(errorBox);
   }
 }
 
@@ -1644,16 +1748,16 @@ function bindAuth() {
       await loadAvailabilityForSelectedGuide();
       updateGuideFilterColor();
       renderCalendar();
-      if (selectedDate) showDetails(selectedDate);
+      if (selectedDate) await showDetails(selectedDate);
     });
   }
 
   if (toursToggle) {
     toursToggle.checked = showAllTours;
-    toursToggle.addEventListener("change", () => {
+    toursToggle.addEventListener("change", async () => {
       showAllTours = toursToggle.checked;
       renderCalendar();
-      if (selectedDate) showDetails(selectedDate);
+      if (selectedDate) await showDetails(selectedDate);
     });
   }
 }
@@ -1665,6 +1769,7 @@ async function initAuth() {
     window.location.href = "sign-in.html";
     return;
   }
+  restoreViewState();
   await loadViewerColorPreferences();
   toggleAuthUI(Boolean(session));
   await ensurePushSubscription(supabase, session);
@@ -1691,6 +1796,10 @@ prevMonthBtn.addEventListener("click", async () => {
     viewMonth = 11;
     viewYear -= 1;
   }
+  selectedDate = null;
+  renderCalendar();
+  clearChildren(detailsContent);
+  detailsContent.textContent = "Pick a date to view tour times and notes.";
   await loadMonthTours();
 });
 
@@ -1700,6 +1809,10 @@ nextMonthBtn.addEventListener("click", async () => {
     viewMonth = 0;
     viewYear += 1;
   }
+  selectedDate = null;
+  renderCalendar();
+  clearChildren(detailsContent);
+  detailsContent.textContent = "Pick a date to view tour times and notes.";
   await loadMonthTours();
 });
 

@@ -25,6 +25,19 @@ window.visualViewport?.addEventListener("resize", setViewportHeightVar);
 setViewportHeightVar();
 
 if ("serviceWorker" in navigator) {
+  const isLocalHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+  if (isLocalHost) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      registrations.forEach((registration) => registration.unregister());
+    });
+    if ("caches" in window) {
+      caches.keys().then((keys) => {
+        keys.forEach((key) => {
+          if (key.startsWith("walkingtours-")) caches.delete(key);
+        });
+      });
+    }
+  } else {
   navigator.serviceWorker.register("./service-worker.js").then((reg) => {
     reg.update();
     reg.addEventListener("updatefound", () => {
@@ -41,4 +54,5 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     window.location.reload();
   });
+  }
 }
