@@ -1,6 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 import { ensurePushSubscription, sendPush } from "./push.js";
+import { createTourModalController } from "./tour-modal-controller.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -36,6 +37,7 @@ let modalOpenTourId = null;
 let ocrBusy = false;
 let viewerColorMode = "auto";
 let viewerGuideColorOverrides = {};
+let tourModalController = null;
 
 function setStatus(message) {
   if (bulkStatus) bulkStatus.textContent = message || "";
@@ -245,10 +247,8 @@ async function loadTours() {
   }
   tours = data || [];
   renderSummaryList();
-  if (modalOpenTourId) {
-    const tour = findTourById(modalOpenTourId);
-    if (tour) openTourModal(tour);
-    else closeTourModal();
+  if (tourModalController) {
+    await tourModalController.syncOpenTour();
   }
 }
 
@@ -358,18 +358,16 @@ function findTourById(id) {
 }
 
 function closeTourModal() {
-  if (!tourModal) return;
-  tourModal.classList.remove("open");
-  tourModal.setAttribute("aria-hidden", "true");
+  if (tourModalController) {
+    tourModalController.closeTourModal();
+  }
   modalOpenTourId = null;
 }
 
 async function openTourModal(tour) {
-  if (!tourModal || !modalBody) return;
-  modalOpenTourId = tour.id;
-  tourModal.classList.add("open");
-  tourModal.setAttribute("aria-hidden", "false");
-  await renderTourModal(tour);
+  modalOpenTourId = tour?.id || null;
+  if (!tourModalController) return;
+  await tourModalController.openTourModal(tour);
 }
 
 async function loadTesseract() {
@@ -1109,6 +1107,28 @@ async function handleBulkSave() {
   const summary = `Updated ${updated} tour${updated === 1 ? "" : "s"}. Skipped ${skipped}.`;
   setStatus(messages.length ? `${summary} ${messages.join(" | ")}` : summary);
 }
+
+tourModalController = createTourModalController({
+  supabase,
+  sendPush,
+  modal: tourModal,
+  modalBody,
+  getSession: () => session,
+  getSharedGuideIds: () => sharedGuideIds,
+  getSharedGuideProfiles: () => sharedGuideProfiles,
+  getShareValidationByGuideId: () => shareValidationByGuideId,
+  getTourTypes: () => tourTypes,
+  findTourById,
+  loadTourTypeForTour,
+  getPlatformsForType,
+  extractParticipantsFromImage,
+  getTodayISO,
+  formatShortDateNoYear,
+  isPrivateForViewer,
+  money,
+  reloadData: loadTours,
+  pageUrl: "./summary-list.html",
+});
 
 async function init() {
   const { data } = await supabase.auth.getSession();
