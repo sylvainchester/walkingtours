@@ -21,6 +21,15 @@ let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
 let toursById = new Map();
 let recognizedImportEmails = new Set();
+let recentKnownDrafts = [];
+
+function isLocalHost() {
+  return ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+}
+
+function getApiBaseUrl() {
+  return isLocalHost() ? "http://localhost:3000" : "https://walkingtours.vercel.app";
+}
 
 function setStatus(message) {
   if (bookingImportStatus) bookingImportStatus.textContent = message || "";
@@ -64,6 +73,25 @@ function formatShortDate(value) {
   });
   const year = date.getUTCFullYear();
   return `${day} of ${month} ${year}`;
+}
+
+function formatForwardedMeta(draft) {
+  const sender = draft.from_email || "Unknown sender";
+  const date = formatShortDate(draft.received_at || draft.created_at);
+  return `Forwarded by ${sender} on the ${date}`;
+}
+
+function formatDetectedSchedule(draft) {
+  const parsed = draft?.llm_extraction || {};
+  const date = parsed?.date || null;
+  const start = parsed?.start_time || null;
+  const end = parsed?.end_time || null;
+  if (!date && !start && !end) return "Unknown";
+  const parts = [];
+  if (date) parts.push(formatShortDate(date));
+  if (start && end) parts.push(`${start} - ${end}`);
+  else if (start) parts.push(start);
+  return parts.join(" · ");
 }
 
 async function refreshDraftsAfterImportCheck() {
@@ -113,6 +141,7 @@ function createEmailPanel(draft) {
 
 function createDraftCard(draft, options = {}) {
   const readOnly = Boolean(options.readOnly);
+  const locked = Boolean(options.locked);
   const card = document.createElement("div");
   card.className = "details booking-import-card";
 
@@ -123,20 +152,27 @@ function createDraftCard(draft, options = {}) {
 
   const meta = document.createElement("div");
   meta.className = "muted";
-  meta.textContent = `${draft.from_email || "Unknown sender"} · ${formatShortDate(draft.received_at || draft.created_at)}`;
+  meta.textContent = formatForwardedMeta(draft);
   card.appendChild(meta);
 
-  const matchedTour = toursById.get(draft.matched_tour_id);
-  const matchLine = document.createElement("div");
-  matchLine.className = "readme-line";
-  matchLine.textContent = `Matched tour: ${formatTourLabel(matchedTour)}`;
-  card.appendChild(matchLine);
+  const detectedLine = document.createElement("div");
+  detectedLine.className = "readme-line";
+  detectedLine.textContent = `Tour detected in email: ${formatDetectedSchedule(draft)} · ${draft.llm_extraction?.tour_name || "Unknown"}`;
+  card.appendChild(detectedLine);
+
+  if (!draft.matched_tour_id) {
+    const noMatchLine = document.createElement("div");
+    noMatchLine.className = "readme-line";
+    noMatchLine.style.color = "#b42318";
+    noMatchLine.textContent = "No matched tour";
+    card.appendChild(noMatchLine);
+  }
 
   const left = document.createElement("div");
   left.className = "booking-import-panel";
   const leftTitle = document.createElement("div");
   leftTitle.className = "details-title";
-  leftTitle.textContent = "Proposed import";
+  leftTitle.textContent = draft.matched_tour_id ? "Proposed import" : "Detected participants";
   left.appendChild(leftTitle);
 
   const leftPlatformLine = document.createElement("div");
@@ -175,6 +211,13 @@ function createDraftCard(draft, options = {}) {
     card.appendChild(errorLine);
   }
 
+  if (locked) {
+    const lockedLine = document.createElement("div");
+    lockedLine.className = "muted";
+    lockedLine.textContent = draft.locked_message || "Already stored in database. Confirm import disabled.";
+    card.appendChild(lockedLine);
+  }
+
   const actions = document.createElement("div");
   actions.className = "form-row";
 
@@ -190,7 +233,7 @@ function createDraftCard(draft, options = {}) {
     confirmBtn.type = "button";
     confirmBtn.className = "primary";
     confirmBtn.textContent = "Confirm import";
-    confirmBtn.disabled = !draft.matched_tour_id || participants.length === 0;
+    confirmBtn.disabled = locked || !draft.matched_tour_id || participants.length === 0;
     confirmBtn.addEventListener("click", async () => {
       const ok = await reviewDraft(draft.id, "confirm");
       if (ok) {
@@ -200,18 +243,20 @@ function createDraftCard(draft, options = {}) {
     });
     actions.appendChild(confirmBtn);
 
-    const rejectBtn = document.createElement("button");
-    rejectBtn.type = "button";
-    rejectBtn.className = "ghost danger";
-    rejectBtn.textContent = "Reject";
-    rejectBtn.addEventListener("click", async () => {
-      const ok = await reviewDraft(draft.id, "reject");
-      if (ok) {
-        setStatus("Import rejected.");
-        await loadDrafts();
-      }
-    });
-    actions.appendChild(rejectBtn);
+    if (!locked) {
+      const rejectBtn = document.createElement("button");
+      rejectBtn.type = "button";
+      rejectBtn.className = "ghost danger";
+      rejectBtn.textContent = "Reject import";
+      rejectBtn.addEventListener("click", async () => {
+        const ok = await reviewDraft(draft.id, "reject");
+        if (ok) {
+          setStatus("Import rejected.");
+          await loadDrafts();
+        }
+      });
+      actions.appendChild(rejectBtn);
+    }
   }
 
   card.appendChild(actions);
@@ -304,9 +349,8 @@ function formatTourLabel(tour) {
 }
 
 async function reviewDraft(draftId, action) {
-  const isLocalHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
-  const apiUrl = isLocalHost
-    ? "https://walkingtours.vercel.app/api/review-booking-import"
+  const apiUrl = isLocalHost()
+    ? `${getApiBaseUrl()}/api/review-booking-import`
     : "/api/review-booking-import";
   const { data: authData } = await supabase.auth.getSession();
   const accessToken = authData?.session?.access_token;
@@ -346,25 +390,27 @@ async function reviewDraft(draftId, action) {
 }
 
 async function checkNewEmails() {
-  const apiUrl = "https://walkingtours.vercel.app/api/poll-bookings?token=danslecullabalayettelemancheetletiquette&use_llm=1";
+  const apiUrl = `${getApiBaseUrl()}/api/poll-bookings?token=danslecullabalayettelemancheetletiquette&use_llm=1&_ts=${Date.now()}`;
 
   checkNewEmailsBtn.disabled = true;
   setStatus("Checking new emails...");
 
   try {
-    const iframe = document.createElement("iframe");
-    iframe.hidden = true;
-    const loaded = new Promise((resolve) => {
-      iframe.addEventListener("load", resolve, { once: true });
-    });
-    iframe.src = apiUrl;
-    document.body.appendChild(iframe);
-
-    await loaded;
-    await sleep(300);
-    iframe.remove();
-
-    setStatus("Email check finished. Reloading imports...");
+    const response = await fetch(apiUrl, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || "Check new emails failed.");
+    }
+    recentKnownDrafts = (result.details || [])
+      .filter((detail) => detail.status === "already_known" && detail.existing_draft)
+      .map((detail) => ({
+        ...detail.existing_draft,
+        locked_message: `Already in database with status: ${detail.existing_status || detail.existing_draft.status || "unknown"}.`,
+      }));
+    const alreadyKnownCount = recentKnownDrafts.length;
+    setStatus(
+      `Email check finished. Checked ${result.checked || 0}, new ${result.imported || 0}, ignored ${result.ignored || 0}, already known ${alreadyKnownCount}. Reloading imports...`
+    );
     await refreshDraftsAfterImportCheck();
   } catch (error) {
     console.error("check new emails error", error);
@@ -398,14 +444,26 @@ async function loadDrafts(options = {}) {
     if (!tour) return true;
     return sharedGuideIds.has(tour.guide_id);
   });
+  const lockedIds = new Set(recentKnownDrafts.map((draft) => draft.id).filter(Boolean));
+  const visibleKnownDrafts = recentKnownDrafts.filter((draft) => {
+    if (!recognizedImportEmails.has(normalizeEmail(draft.from_email))) return false;
+    if (!draft.matched_tour_id) return true;
+    const tour = toursById.get(draft.matched_tour_id);
+    if (!tour) return true;
+    return sharedGuideIds.has(tour.guide_id);
+  });
   const drafts = visibleRows.filter((draft) => !["confirmed", "rejected"].includes(draft.status));
-  const historyRows = visibleRows.filter((draft) => ["confirmed", "rejected"].includes(draft.status));
+  const historyRows = visibleRows.filter((draft) => ["confirmed", "rejected"].includes(draft.status) && !lockedIds.has(draft.id));
 
-  if (!drafts.length) {
+  if (!drafts.length && !visibleKnownDrafts.length) {
     const empty = document.createElement("div");
     empty.textContent = "No booking imports to review.";
     bookingImportsList.appendChild(empty);
   }
+
+  visibleKnownDrafts.forEach((draft) => {
+    bookingImportsList.appendChild(createDraftCard(draft, { locked: true }));
+  });
 
   drafts.forEach((draft) => {
     bookingImportsList.appendChild(createDraftCard(draft));

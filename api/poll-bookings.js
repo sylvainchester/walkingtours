@@ -328,6 +328,21 @@ function resolveTourTypeForTour(tour, tourTypes) {
   ) || null;
 }
 
+function normalizeTypeKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function typeMatchesTour(detectedType, tourTypeName) {
+  const detected = normalizeTypeKey(detectedType);
+  const actual = normalizeTypeKey(tourTypeName);
+  if (!detected || !actual) return false;
+  if (detected === actual) return true;
+  return detected.includes(actual) || actual.includes(detected);
+}
+
 function resolveCanonicalPlatformName(platformHint, platforms) {
   const hint = normalizePlatformKey(platformHint);
   if (!hint) return null;
@@ -364,17 +379,47 @@ function matchTourFromLLM(extraction, tours, tourTypes) {
 
   if (matchedType) {
     const byType = candidates.filter(
-      (tour) => String(tour.type || "").trim().toLowerCase() === matchedType.toLowerCase()
+      (tour) => typeMatchesTour(matchedType, tour.type)
     );
-    if (byType.length) candidates = byType;
+    if (!byType.length) {
+      return {
+        matchedTour: null,
+        matchedPlatform,
+        matchedType,
+        dates: normalizedDate ? [normalizedDate] : [],
+        times: normalizedTime ? [normalizedTime] : [],
+        ambiguityCount: 0,
+      };
+    }
+    candidates = byType;
   }
   if (normalizedDate) {
     const byDate = candidates.filter((tour) => tour.date === normalizedDate);
-    if (byDate.length) candidates = byDate;
+    if (!byDate.length) {
+      return {
+        matchedTour: null,
+        matchedPlatform,
+        matchedType,
+        dates: [normalizedDate],
+        times: normalizedTime ? [normalizedTime] : [],
+        ambiguityCount: 0,
+      };
+    }
+    candidates = byDate;
   }
   if (normalizedTime) {
     const byTime = candidates.filter((tour) => String(tour.start_time || "").slice(0, 5) === normalizedTime);
-    if (byTime.length) candidates = byTime;
+    if (!byTime.length) {
+      return {
+        matchedTour: null,
+        matchedPlatform,
+        matchedType,
+        dates: normalizedDate ? [normalizedDate] : [],
+        times: [normalizedTime],
+        ambiguityCount: 0,
+      };
+    }
+    candidates = byTime;
   }
   if (matchedPlatform) {
     const byPlatform = candidates.filter((tour) => {
@@ -382,7 +427,17 @@ function matchTourFromLLM(extraction, tours, tourTypes) {
       const platforms = Array.isArray(tourType?.platforms) ? tourType.platforms : [];
       return Boolean(resolveCanonicalPlatformName(matchedPlatform, platforms));
     });
-    if (byPlatform.length) candidates = byPlatform;
+    if (!byPlatform.length) {
+      return {
+        matchedTour: null,
+        matchedPlatform,
+        matchedType,
+        dates: normalizedDate ? [normalizedDate] : [],
+        times: normalizedTime ? [normalizedTime] : [],
+        ambiguityCount: 0,
+      };
+    }
+    candidates = byPlatform;
   }
 
   const matchedTour = candidates.length === 1 ? candidates[0] : null;
@@ -685,6 +740,59 @@ function buildSharedGuideIds(rows, callerId) {
   return Array.from(ids);
 }
 
+function buildMatchDebug(match, candidateTours, candidateTourTypes, allowedGuideIds, useLlm) {
+  return {
+    strategy: useLlm ? "llm" : "heuristic",
+    matched_tour_id: match?.matchedTour?.id || null,
+    matched_type: match?.matchedType || null,
+    matched_platform: match?.matchedPlatform || null,
+    dates: Array.isArray(match?.dates) ? match.dates : [],
+    times: Array.isArray(match?.times) ? match.times : [],
+    ambiguity_count: Number(match?.ambiguityCount || 0),
+    searched_guide_ids: Array.isArray(allowedGuideIds) ? allowedGuideIds : [],
+    candidate_tours_count: Array.isArray(candidateTours) ? candidateTours.length : 0,
+    candidate_tours: (candidateTours || []).slice(0, 12).map((tour) => ({
+      id: tour.id,
+      date: tour.date,
+      start_time: String(tour.start_time || "").slice(0, 5),
+      type: tour.type || null,
+      guide_id: tour.guide_id || null,
+      platform_name: tour.platform?.name || null,
+    })),
+    candidate_tour_types: (candidateTourTypes || []).slice(0, 12).map((tourType) => ({
+      guide_id: tourType.guide_id || null,
+      name: tourType.name || null,
+      platforms: Array.isArray(tourType.platforms)
+        ? tourType.platforms.map((platform) => platform?.name).filter(Boolean)
+        : [],
+    })),
+  };
+}
+
+function buildParticipantsDebug(heuristicParticipants, llmExtraction, effectiveParticipants, useLlm) {
+  const llmParticipants = Array.isArray(llmExtraction?.participants)
+    ? llmExtraction.participants
+        .map((participant) => ({
+          name: String(participant?.name || llmExtraction?.booking_name || "").trim(),
+          group_size: Number(participant?.group_size || 0),
+        }))
+        .filter((participant) => participant.name || participant.group_size > 0)
+    : [];
+
+  return {
+    strategy: useLlm && llmParticipants.length ? "llm" : "heuristic",
+    heuristic: (heuristicParticipants || []).map((participant) => ({
+      name: participant.name,
+      group_size: participant.group_size,
+    })),
+    llm: llmParticipants,
+    effective: (effectiveParticipants || []).map((participant) => ({
+      name: participant.name,
+      group_size: participant.group_size,
+    })),
+  };
+}
+
 async function markMessageRead(gmail, messageId) {
   await gmail.users.messages.modify({
     userId: "me",
@@ -941,7 +1049,7 @@ module.exports = async (req, res) => {
         .order("name"),
       supabase
         .from("incoming_booking_emails")
-        .select("gmail_message_id,status")
+        .select("id,gmail_message_id,gmail_thread_id,subject,from_email,received_at,raw_text,raw_html,matched_tour_id,matched_platform_name,imported_participants,llm_extraction,status,error_message,created_at")
         .order("created_at", { ascending: false })
         .limit(500),
       supabase
@@ -982,7 +1090,7 @@ module.exports = async (req, res) => {
     if (shareRowsRes.error) throw new Error(shareRowsRes.error.message);
 
     const knownMessages = new Map(
-      (existingEmailsRes.data || []).map((row) => [row.gmail_message_id, row.status])
+      (existingEmailsRes.data || []).map((row) => [row.gmail_message_id, row])
     );
     const guideByEmail = new Map(
       profilesData.flatMap((profile) => {
@@ -1020,13 +1128,7 @@ module.exports = async (req, res) => {
         (fullMessage.data.payload?.headers || []).map((header) => [header.name.toLowerCase(), header.value || ""])
       );
       const gmailMessageId = headers.get("message-id") || fullMessage.data.id;
-      if (
-        knownMessages.has(gmailMessageId)
-        && ["pending_review", "confirmed", "rejected", "ignored"].includes(knownMessages.get(gmailMessageId))
-      ) {
-        if (!dryRun) await markMessageRead(gmail, fullMessage.data.id);
-        continue;
-      }
+      const existingDraft = knownMessages.get(gmailMessageId) || null;
 
       const parts = collectBodyParts(fullMessage.data.payload);
       const subject = headers.get("subject") || "";
@@ -1060,6 +1162,12 @@ module.exports = async (req, res) => {
         .filter((participant) => participant.name)
         || [];
       const effectiveParticipants = useLlm && extractedParticipants.length ? extractedParticipants : participants;
+      const participantsDebug = buildParticipantsDebug(
+        participants,
+        parsedLlm,
+        effectiveParticipants,
+        useLlm
+      );
       const match = senderGuide
         ? (useLlm && parsedLlm
             ? matchTourFromLLM(parsedLlm, candidateTours, candidateTourTypes)
@@ -1077,6 +1185,13 @@ module.exports = async (req, res) => {
             times: [],
             ambiguityCount: 0,
           };
+      const matchDebug = buildMatchDebug(
+        match,
+        candidateTours,
+        candidateTourTypes,
+        allowedGuideIds,
+        useLlm && Boolean(parsedLlm)
+      );
 
       let status = "ignored";
       let errorMessage = null;
@@ -1140,11 +1255,49 @@ module.exports = async (req, res) => {
         matched_tour_id: matchedTourId,
         matched_platform_name: matchedPlatformName,
         imported_participants: proposedParticipants,
-        llm_extraction: llmExtraction?.parsed || {},
+        llm_extraction: {
+          ...(llmExtraction?.parsed || {}),
+          _model: llmExtraction?.model || null,
+          _error: llmExtraction?.error || null,
+          _match_debug: matchDebug,
+          _participants_debug: participantsDebug,
+        },
         status,
         error_message: errorMessage,
         processed_at: new Date().toISOString(),
       };
+
+      if (
+        existingDraft
+        && ["pending_review", "confirmed", "rejected", "ignored", "error", "received"].includes(existingDraft.status)
+      ) {
+        const mergedDraft = {
+          ...existingDraft,
+          subject,
+          from_email: fromEmail || existingDraft.from_email || null,
+          received_at: receivedAt || existingDraft.received_at || null,
+          raw_text: rawText || existingDraft.raw_text || "",
+          raw_html: rawHtml || existingDraft.raw_html || "",
+          matched_tour_id: matchedTourId,
+          matched_platform_name: matchedPlatformName,
+          imported_participants: proposedParticipants.length
+            ? proposedParticipants
+            : (Array.isArray(existingDraft.imported_participants) ? existingDraft.imported_participants : []),
+          llm_extraction: payload.llm_extraction,
+          error_message: errorMessage,
+          status: existingDraft.status,
+        };
+        details.push({
+          gmail_message_id: gmailMessageId,
+          gmail_thread_id: fullMessage.data.threadId || null,
+          subject,
+          status: "already_known",
+          existing_status: existingDraft.status,
+          existing_draft: mergedDraft,
+        });
+        if (!dryRun) await markMessageRead(gmail, fullMessage.data.id);
+        continue;
+      }
 
       if (dryRun) {
         if (status === "imported") imported += 1;
