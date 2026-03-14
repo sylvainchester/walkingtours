@@ -5,7 +5,7 @@ function json(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "content-type, x-cron-token");
+  res.setHeader("Access-Control-Allow-Headers", "content-type, x-cron-token, authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.end(JSON.stringify(body));
 }
@@ -793,6 +793,14 @@ function buildParticipantsDebug(heuristicParticipants, llmExtraction, effectiveP
   };
 }
 
+function buildRecognizedEmailsForProfile(profile) {
+  return new Set([
+    normalizeEmail(profile?.email),
+    normalizeEmail(profile?.import_email),
+    normalizeEmail(profile?.import_email_2),
+  ].filter(Boolean));
+}
+
 async function markMessageRead(gmail, messageId) {
   await gmail.users.messages.modify({
     userId: "me",
@@ -817,8 +825,9 @@ module.exports = async (req, res) => {
     const debug = String(req.query?.debug || req.body?.debug || "").toLowerCase() === "1"
       || String(req.query?.debug || req.body?.debug || "").toLowerCase() === "true";
     const gmailId = String(req.query?.gmail_id || req.body?.gmail_id || "").trim();
+    const authenticatedUserId = await verifyUserId(req);
     const tokenAuthorized = Boolean(expectedToken) && providedToken === expectedToken;
-    const userId = tokenAuthorized ? null : await verifyUserId(req);
+    const userId = authenticatedUserId || null;
     if (!tokenAuthorized && !userId) {
       return json(res, 401, { ok: false, error: "Unauthorized" });
     }
@@ -933,14 +942,8 @@ module.exports = async (req, res) => {
 
       const guideByEmail = new Map(
         profilesData.flatMap((profile) => {
-          const keys = new Set([
-            normalizeEmail(profile.email),
-            normalizeEmail(profile.import_email),
-            normalizeEmail(profile.import_email_2),
-          ]);
-          return Array.from(keys)
-            .filter(Boolean)
-            .map((key) => [key, profile]);
+          const keys = buildRecognizedEmailsForProfile(profile);
+          return Array.from(keys).map((key) => [key, profile]);
         })
       );
       const sharedGuideIdsByGuideId = new Map(
@@ -949,11 +952,15 @@ module.exports = async (req, res) => {
           buildSharedGuideIds(shareRowsRes.data || [], profile.id),
         ])
       );
+      const loggedProfile = profilesData.find((profile) => profile.id === userId) || null;
+      const recognizedEmails = buildRecognizedEmailsForProfile(loggedProfile);
 
-      const senderGuide = guideByEmail.get(fromEmail) || null;
-      const allowedGuideIds = senderGuide
-        ? (sharedGuideIdsByGuideId.get(senderGuide.id) || [senderGuide.id])
-        : [];
+      const senderGuide = loggedProfile
+        ? (recognizedEmails.has(fromEmail) ? loggedProfile : null)
+        : (guideByEmail.get(fromEmail) || null);
+      const allowedGuideIds = loggedProfile
+        ? (sharedGuideIdsByGuideId.get(loggedProfile.id) || [loggedProfile.id])
+        : (senderGuide ? (sharedGuideIdsByGuideId.get(senderGuide.id) || [senderGuide.id]) : []);
       const candidateTours = (toursRes.data || []).filter((tour) => allowedGuideIds.includes(tour.guide_id));
       const candidateTourTypes = (tourTypesRes.data || []).filter((tourType) => allowedGuideIds.includes(tourType.guide_id));
 
@@ -1094,14 +1101,8 @@ module.exports = async (req, res) => {
     );
     const guideByEmail = new Map(
       profilesData.flatMap((profile) => {
-        const keys = new Set([
-          normalizeEmail(profile.email),
-          normalizeEmail(profile.import_email),
-          normalizeEmail(profile.import_email_2),
-        ]);
-        return Array.from(keys)
-          .filter(Boolean)
-          .map((key) => [key, profile]);
+        const keys = buildRecognizedEmailsForProfile(profile);
+        return Array.from(keys).map((key) => [key, profile]);
       })
     );
     const sharedGuideIdsByGuideId = new Map(
@@ -1110,6 +1111,10 @@ module.exports = async (req, res) => {
         buildSharedGuideIds(shareRowsRes.data || [], profile.id),
       ])
     );
+    const loggedProfile = userId
+      ? (profilesData.find((profile) => profile.id === userId) || null)
+      : null;
+    const recognizedEmails = buildRecognizedEmailsForProfile(loggedProfile);
 
     const messages = messagesRes.data.messages || [];
     let imported = 0;
@@ -1136,10 +1141,12 @@ module.exports = async (req, res) => {
       const receivedAt = parseHeaderDate(headers.get("date"));
       const rawText = buildMessageText(subject, parts);
       const rawHtml = parts.html.join("\n\n").trim();
-      const senderGuide = guideByEmail.get(fromEmail);
-      const allowedGuideIds = senderGuide
-        ? (sharedGuideIdsByGuideId.get(senderGuide.id) || [senderGuide.id])
-        : [];
+      const senderGuide = loggedProfile
+        ? (recognizedEmails.has(fromEmail) ? loggedProfile : null)
+        : (guideByEmail.get(fromEmail) || null);
+      const allowedGuideIds = loggedProfile
+        ? (sharedGuideIdsByGuideId.get(loggedProfile.id) || [loggedProfile.id])
+        : (senderGuide ? (sharedGuideIdsByGuideId.get(senderGuide.id) || [senderGuide.id]) : []);
       const candidateTours = (toursRes.data || []).filter((tour) => allowedGuideIds.includes(tour.guide_id));
       const candidateTourTypes = (tourTypesRes.data || []).filter((tourType) => allowedGuideIds.includes(tourType.guide_id));
 

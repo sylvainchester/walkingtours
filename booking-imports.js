@@ -94,72 +94,6 @@ function formatDetectedSchedule(draft) {
   return parts.join(" · ");
 }
 
-function formatGuideName(guideId) {
-  const profile = sharedGuideProfiles.get(guideId);
-  if (!profile) return guideId || "Unknown";
-  return `${profile.first_name} ${profile.last_name}`.trim();
-}
-
-function createMatchDebugBlock(draft) {
-  const debug = draft?.llm_extraction?._match_debug;
-  if (!debug) return null;
-
-  const block = document.createElement("div");
-  block.className = "muted";
-  block.style.whiteSpace = "pre-wrap";
-
-  const lines = [];
-  lines.push(`Logic: ${debug.strategy || "unknown"}`);
-  lines.push(`Detected type: ${debug.matched_type || "Unknown"}`);
-  lines.push(`Detected platform: ${debug.matched_platform || "Unknown"}`);
-  lines.push(`Detected dates: ${(debug.dates || []).join(", ") || "None"}`);
-  lines.push(`Detected times: ${(debug.times || []).join(", ") || "None"}`);
-  lines.push(`Guides searched: ${(debug.searched_guide_ids || []).map(formatGuideName).join(" · ") || "None"}`);
-  lines.push(`Candidate tours count: ${debug.candidate_tours_count ?? 0}`);
-  lines.push(`Ambiguity count: ${debug.ambiguity_count ?? 0}`);
-  if (draft.error_message) lines.push(`Decision: ${draft.error_message}`);
-
-  const candidateTours = Array.isArray(debug.candidate_tours) ? debug.candidate_tours : [];
-  if (candidateTours.length) {
-    lines.push("Candidate tours:");
-    candidateTours.forEach((tour) => {
-      lines.push(`- ${tour.date} · ${tour.start_time || "--:--"} · ${formatGuideName(tour.guide_id)} · ${tour.type || "Unknown"}${tour.platform_name ? ` · ${tour.platform_name}` : ""}`);
-    });
-  }
-
-  const candidateTypes = Array.isArray(debug.candidate_tour_types) ? debug.candidate_tour_types : [];
-  if (candidateTypes.length) {
-    lines.push("Candidate tour types:");
-    candidateTypes.forEach((tourType) => {
-      lines.push(`- ${formatGuideName(tourType.guide_id)} · ${tourType.name || "Unknown"}${tourType.platforms?.length ? ` · ${tourType.platforms.join(", ")}` : ""}`);
-    });
-  }
-
-  block.textContent = lines.join("\n");
-  return block;
-}
-
-function createParticipantsDebugBlock(draft) {
-  const debug = draft?.llm_extraction?._participants_debug;
-  if (!debug) return null;
-
-  const formatList = (items) => {
-    if (!Array.isArray(items) || !items.length) return "None";
-    return items.map((participant) => `${participant.name || "Unnamed"} (${participant.group_size || 0})`).join(" · ");
-  };
-
-  const block = document.createElement("div");
-  block.className = "muted";
-  block.style.whiteSpace = "pre-wrap";
-  block.textContent = [
-    `Participants logic: ${debug.strategy || "unknown"}`,
-    `Heuristic participants: ${formatList(debug.heuristic)}`,
-    `LLM participants: ${formatList(debug.llm)}`,
-    `Effective participants: ${formatList(debug.effective)}`,
-  ].join("\n");
-  return block;
-}
-
 async function refreshDraftsAfterImportCheck() {
   await loadSharedGuides();
   await loadToursIndex();
@@ -277,12 +211,6 @@ function createDraftCard(draft, options = {}) {
     card.appendChild(errorLine);
   }
 
-  const debugBlock = createMatchDebugBlock(draft);
-  if (debugBlock) card.appendChild(debugBlock);
-
-  const participantsDebugBlock = createParticipantsDebugBlock(draft);
-  if (participantsDebugBlock) card.appendChild(participantsDebugBlock);
-
   if (locked) {
     const lockedLine = document.createElement("div");
     lockedLine.className = "muted";
@@ -301,25 +229,27 @@ function createDraftCard(draft, options = {}) {
     closeBtn.addEventListener("click", closeBookingImportModal);
     actions.appendChild(closeBtn);
   } else {
-    const confirmBtn = document.createElement("button");
-    confirmBtn.type = "button";
-    confirmBtn.className = "primary";
-    confirmBtn.textContent = "Confirm import";
-    confirmBtn.disabled = locked || !draft.matched_tour_id || participants.length === 0;
-    confirmBtn.addEventListener("click", async () => {
-      const ok = await reviewDraft(draft.id, "confirm");
-      if (ok) {
-        setStatus("Import confirmed.");
-        await loadDrafts();
-      }
-    });
-    actions.appendChild(confirmBtn);
+    if (draft.matched_tour_id) {
+      const confirmBtn = document.createElement("button");
+      confirmBtn.type = "button";
+      confirmBtn.className = "primary";
+      confirmBtn.textContent = "Confirm import";
+      confirmBtn.disabled = locked || participants.length === 0;
+      confirmBtn.addEventListener("click", async () => {
+        const ok = await reviewDraft(draft.id, "confirm");
+        if (ok) {
+          setStatus("Import confirmed.");
+          await loadDrafts();
+        }
+      });
+      actions.appendChild(confirmBtn);
+    }
 
     if (!locked) {
       const rejectBtn = document.createElement("button");
       rejectBtn.type = "button";
       rejectBtn.className = "ghost danger";
-      rejectBtn.textContent = "Reject import";
+      rejectBtn.textContent = draft.matched_tour_id ? "Reject import" : "Reject email";
       rejectBtn.addEventListener("click", async () => {
         const ok = await reviewDraft(draft.id, "reject");
         if (ok) {
@@ -468,7 +398,17 @@ async function checkNewEmails() {
   setStatus("Checking new emails...");
 
   try {
-    const response = await fetch(apiUrl, { cache: "no-store" });
+    const { data: authData } = await supabase.auth.getSession();
+    const accessToken = authData?.session?.access_token;
+    if (!accessToken) {
+      throw new Error("Auth session missing.");
+    }
+    const response = await fetch(apiUrl, {
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
     const result = await response.json();
     if (!response.ok || !result?.ok) {
       throw new Error(result?.error || "Check new emails failed.");
