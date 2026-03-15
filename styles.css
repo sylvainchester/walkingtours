@@ -834,6 +834,127 @@ h1 {
   line-height: 1.45;
 }
 
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.marketing-filters {
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.marketing-type-field {
+  flex: 1 1 220px;
+}
+
+.marketing-empty {
+  color: #6e644d;
+  padding: 1rem 0;
+}
+
+.marketing-results {
+  display: grid;
+  gap: 1rem;
+}
+
+.marketing-chart-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.marketing-pie {
+  width: min(270px, 70vw);
+  height: min(270px, 70vw);
+  border-radius: 50%;
+  position: relative;
+  background: #efe7c8;
+  box-shadow: inset 0 0 0 1px rgba(98, 84, 54, 0.14);
+}
+
+.marketing-pie-center {
+  position: absolute;
+  inset: 50%;
+  transform: translate(-50%, -50%);
+  width: 42%;
+  height: 42%;
+  border-radius: 50%;
+  background: rgba(255, 251, 239, 0.94);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 8px 18px rgba(64, 52, 22, 0.12);
+}
+
+.marketing-pie-total {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1b4a34;
+  line-height: 1;
+}
+
+.marketing-pie-label {
+  font-size: 0.8rem;
+  color: #6e644d;
+  margin-top: 0.25rem;
+}
+
+.marketing-legend {
+  display: grid;
+  gap: 0.08rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 14px;
+  background: rgba(255, 251, 239, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(98, 84, 54, 0.08);
+}
+
+.marketing-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.04rem 0;
+}
+
+.marketing-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.marketing-weeks {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.marketing-week-row {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.marketing-week-label {
+  font-size: 0.9rem;
+  color: #5f553f;
+  font-weight: 600;
+}
+
+.marketing-week-bar {
+  min-height: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+  background: rgba(239, 231, 200, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(98, 84, 54, 0.08);
+}
+
+.marketing-week-segment {
+  min-width: 8px;
+}
+
 .tour-row {
   display: flex;
   align-items: center;

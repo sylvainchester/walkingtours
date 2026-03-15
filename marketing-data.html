@@ -9,7 +9,7 @@
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="profile-page">
     <div class="app">
       <header class="topbar">
         <div>
@@ -36,14 +36,50 @@
       </header>
 
       <section class="details" aria-live="polite">
-        <div class="details-title">Marketing Data</div>
         <div class="details-content">
-          <div class="readme-line">Under construction.</div>
+          <div class="form-row marketing-filters">
+            <div class="field">
+              <label class="muted" for="marketingStart">Start date</label>
+              <input class="input" id="marketingStart" type="date" />
+            </div>
+            <div class="field">
+              <label class="muted" for="marketingEnd">End date</label>
+              <input class="input" id="marketingEnd" type="date" />
+            </div>
+          </div>
+          <div class="form-row marketing-filters">
+            <div class="field marketing-type-field">
+              <label class="muted" for="marketingGuide">Guide</label>
+              <select class="select" id="marketingGuide">
+                <option value="">All guides</option>
+              </select>
+            </div>
+            <div class="field marketing-type-field">
+              <label class="muted" for="marketingTourType">Tour type</label>
+              <select class="select" id="marketingTourType">
+                <option value="">All tours</option>
+              </select>
+            </div>
+          </div>
+          <div class="muted" id="marketingStatus"></div>
+          <div class="marketing-empty" id="marketingEmpty">Choose filters and press submit.</div>
+          <div class="marketing-results" id="marketingResults" hidden>
+            <div class="marketing-chart-wrap">
+              <div class="marketing-pie" id="marketingPie">
+                <div class="marketing-pie-center">
+                  <div class="marketing-pie-total" id="marketingTotal">0</div>
+                  <div class="marketing-pie-label">participants</div>
+                </div>
+              </div>
+            </div>
+            <div class="marketing-legend" id="marketingLegend"></div>
+            <div class="marketing-weeks" id="marketingWeeks"></div>
+          </div>
         </div>
       </section>
     </div>
 
-    <script type="module" src="readme.js"></script>
+    <script type="module" src="marketing-data.js"></script>
     <script src="sw-register.js"></script>
   </body>
 </html>

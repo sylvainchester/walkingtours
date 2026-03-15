@@ -1,4 +1,4 @@
-const CACHE_NAME = "walkingtours-v33";
+const CACHE_NAME = "walkingtours-v34";
 const ASSETS = [
   "./",
   "./index.html",
@@ -24,6 +24,7 @@ const ASSETS = [
   "./profile.js",
   "./tour-config.js",
   "./manage-invoices.js",
+  "./marketing-data.js",
   "./booking-imports.js",
   "./summary-list.js",
   "./readme.js",
