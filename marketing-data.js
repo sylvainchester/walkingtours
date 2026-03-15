@@ -12,6 +12,7 @@ const marketingStatus = document.getElementById("marketingStatus");
 const marketingEmpty = document.getElementById("marketingEmpty");
 const marketingResults = document.getElementById("marketingResults");
 const marketingPie = document.getElementById("marketingPie");
+const marketingPieLabels = document.getElementById("marketingPieLabels");
 const marketingTotal = document.getElementById("marketingTotal");
 const marketingLegend = document.getElementById("marketingLegend");
 const marketingWeeks = document.getElementById("marketingWeeks");
@@ -139,6 +140,7 @@ async function loadTourTypes() {
 function renderPie(rows) {
   const total = rows.reduce((sum, row) => sum + row.count, 0);
   marketingTotal.textContent = String(total);
+  clearChildren(marketingPieLabels);
 
   if (!total) {
     marketingPie.style.background = "#efe7c8";
@@ -150,12 +152,29 @@ function renderPie(rows) {
     const color = PIE_COLORS[index % PIE_COLORS.length];
     const start = cursor;
     const sweep = (row.count / total) * 360;
+    const mid = start + (sweep / 2);
     cursor += sweep;
     row.color = color;
+    row.percent = Math.round((row.count / total) * 100);
+    row.midAngle = mid;
     return `${color} ${start}deg ${cursor}deg`;
   });
 
   marketingPie.style.background = `conic-gradient(${segments.join(", ")})`;
+
+  rows.forEach((row) => {
+    if (row.percent < 5) return;
+    const label = document.createElement("div");
+    label.className = "marketing-pie-slice-label";
+    label.textContent = `${row.percent}%`;
+    const radians = ((row.midAngle - 90) * Math.PI) / 180;
+    const radius = 38;
+    const x = 50 + (Math.cos(radians) * radius);
+    const y = 50 + (Math.sin(radians) * radius);
+    label.style.left = `${x}%`;
+    label.style.top = `${y}%`;
+    marketingPieLabels.appendChild(label);
+  });
 }
 
 function renderLegend(rows) {
@@ -171,8 +190,7 @@ function renderLegend(rows) {
     item.appendChild(swatch);
 
     const label = document.createElement("div");
-    const pct = row.total ? Math.round((row.count / row.total) * 100) : 0;
-    label.textContent = `${row.platform} · ${row.count} participants · ${pct}%`;
+    label.textContent = row.platform;
     item.appendChild(label);
 
     marketingLegend.appendChild(item);
