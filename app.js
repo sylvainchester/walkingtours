@@ -101,6 +101,14 @@ function addMinutesToTime(value, minutesToAdd) {
   return `${pad2(newH)}:${pad2(newM)}`;
 }
 
+function getTourTypePricePerPerson(type, platform) {
+  if (!type) return 0;
+  if (type.payment_type === "free") {
+    return Number(platform?.commission_percent ?? type.fee_per_participant ?? 0);
+  }
+  return Number(type.ticket_price ?? 0);
+}
+
 function formatShortDateNoYear(iso) {
   const date = parseISO(iso);
   const day = date.getDate();
@@ -287,7 +295,7 @@ async function loadTourTypes() {
   if (!session || sharedGuideIds.size === 0) return;
   const { data, error } = await supabase
     .from("tour_types")
-    .select("id,guide_id,name,shareable,payment_type,fee_per_participant,platforms")
+    .select("id,guide_id,name,shareable,payment_type,ticket_price,fee_per_participant,platforms")
     .order("name");
   if (!error && data) tourTypes = data;
 }
@@ -353,7 +361,7 @@ async function loadMonthTours() {
   const [toursResponse, availabilityResponse] = await Promise.all([
     supabase
       .from("tours")
-      .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
+      .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
       .gte("date", start)
       .lte("date", end)
       .in("guide_id", guideIds)
@@ -595,6 +603,7 @@ async function renderSelectedDay() {
     if (!selectedType) return alert("Please select a tour type.");
     const selectedPlatform = getPlatformsForType(selectedType)[0] || null;
     if (!selectedPlatform) return alert("Please configure at least one platform for this tour type.");
+    const pricePerPerson = getTourTypePricePerPerson(selectedType, selectedPlatform);
 
     const endValue = addMinutesToTime(startInput.value, 90);
     const needsValidation = selectedGuide === session.user.id
@@ -625,6 +634,8 @@ async function renderSelectedDay() {
       type: selectedType.name,
       is_private: selectedType.shareable === false,
       platform: selectedPlatform,
+      price_per_person: pricePerPerson,
+      source_tour_type_id: selectedType.id,
     });
     if (error) return;
 

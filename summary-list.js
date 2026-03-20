@@ -225,7 +225,7 @@ async function loadTourTypes() {
   if (!session || sharedGuideIds.size === 0) return;
   const { data, error } = await supabase
     .from("tour_types")
-    .select("id,guide_id,name,shareable,payment_type,fee_per_participant,platforms")
+    .select("id,guide_id,name,shareable,payment_type,ticket_price,fee_per_participant,platforms")
     .order("name");
   if (error || !data) return;
   tourTypes = data;
@@ -236,7 +236,7 @@ async function loadTours() {
   const guideIds = Array.from(sharedGuideIds);
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
+    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
     .in("guide_id", guideIds)
     .gte("date", getTodayISO())
     .order("date")

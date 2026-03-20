@@ -113,6 +113,14 @@ function addMinutesToTime(value, minutesToAdd) {
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
 
+function getTypePricePerPerson(typeRecord, platform) {
+  if (!typeRecord) return 0;
+  if (typeRecord.payment_type === "free") {
+    return Number(platform?.commission_percent ?? typeRecord.fee_per_participant ?? 0);
+  }
+  return Number(typeRecord.ticket_price ?? 0);
+}
+
 function getTodayISO() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -378,6 +386,7 @@ async function syncScheduledTours(typeRecord) {
       type: typeRecord.name,
       is_private: typeRecord.shareable === false,
       platform: Array.isArray(typeRecord.platforms) && typeRecord.platforms.length ? typeRecord.platforms[0] : null,
+      price_per_person: getTypePricePerPerson(typeRecord, Array.isArray(typeRecord.platforms) && typeRecord.platforms.length ? typeRecord.platforms[0] : null),
       source_tour_type_id: typeRecord.id,
       source_template_id: tour.source_template_id,
     }));
@@ -399,6 +408,7 @@ async function syncScheduledTours(typeRecord) {
         type: typeRecord.name,
         is_private: typeRecord.shareable === false,
         platform: nextPlatform,
+        price_per_person: getTypePricePerPerson(typeRecord, nextPlatform),
         start_time: tour.start_time,
         end_time: tour.end_time,
       };
@@ -770,16 +780,15 @@ function renderTypeModal(type) {
   typeModalBody.appendChild(templateWrapper);
   applyVisibility();
 
-  const actions = document.createElement("div");
-  actions.className = "form-row";
+  if (isOwner) {
+    const actions = document.createElement("div");
+    actions.className = "form-row";
 
-  const saveBtn = document.createElement("button");
-  saveBtn.className = "primary";
-  saveBtn.type = "button";
-  saveBtn.textContent = "Save";
-  saveBtn.disabled = !isOwner;
-  saveBtn.addEventListener("click", async () => {
-    if (!isOwner) return;
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "primary";
+    saveBtn.type = "button";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", async () => {
     const name = nameInput.value.trim();
     const isFree = paymentSelect.value === "free";
     if (!name) {
@@ -891,38 +900,59 @@ function renderTypeModal(type) {
         .eq("type", oldName);
     }
 
+    const nextPlatform = Array.isArray(platforms) && platforms.length ? platforms[0] : null;
+    const futureToursPayload = {
+      type: name,
+      is_private: shareableInput.checked ? false : true,
+      platform: nextPlatform,
+      price_per_person: getTypePricePerPerson({ ...type, ...payload }, nextPlatform),
+    };
+
+    await supabase
+      .from("tours")
+      .update(futureToursPayload)
+      .eq("source_tour_type_id", type.id)
+      .gte("date", getTodayISO());
+
+    await supabase
+      .from("tours")
+      .update(futureToursPayload)
+      .eq("guide_id", type.guide_id)
+      .eq("type", oldName)
+      .is("source_tour_type_id", null)
+      .gte("date", getTodayISO());
+
     setStatus("Saved.");
     await loadTypes();
     closeTypeModal();
-  });
+    });
 
-  const deleteBtn = document.createElement("button");
-  deleteBtn.className = "ghost";
-  deleteBtn.type = "button";
-  deleteBtn.textContent = "Delete";
-  deleteBtn.disabled = !isOwner;
-  deleteBtn.addEventListener("click", async () => {
-    if (!isOwner) return;
-    if (!confirm("Delete this tour type?")) return;
-    const todayIso = getTodayISO();
-    await supabase
-      .from("tours")
-      .delete()
-      .eq("source_tour_type_id", type.id)
-      .gte("date", todayIso);
-    const { error } = await supabase.from("tour_types").delete().eq("id", type.id);
-    if (error) {
-      setStatus(`Delete error: ${error.message}`);
-      return;
-    }
-    setStatus("Deleted.");
-    await loadTypes();
-    closeTypeModal();
-  });
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "ghost";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm("Delete this tour type?")) return;
+      const todayIso = getTodayISO();
+      await supabase
+        .from("tours")
+        .delete()
+        .eq("source_tour_type_id", type.id)
+        .gte("date", todayIso);
+      const { error } = await supabase.from("tour_types").delete().eq("id", type.id);
+      if (error) {
+        setStatus(`Delete error: ${error.message}`);
+        return;
+      }
+      setStatus("Deleted.");
+      await loadTypes();
+      closeTypeModal();
+    });
 
-  actions.appendChild(saveBtn);
-  actions.appendChild(deleteBtn);
-  typeModalBody.appendChild(actions);
+    actions.appendChild(saveBtn);
+    actions.appendChild(deleteBtn);
+    typeModalBody.appendChild(actions);
+  }
 }
 
 async function loadTypes() {

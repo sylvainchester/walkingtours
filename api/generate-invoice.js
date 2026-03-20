@@ -95,7 +95,7 @@ module.exports = async (req, res) => {
 
     const { data: tour, error: tourError } = await supabase
       .from("tours")
-      .select("id,date,type,platform,guide_id,created_by,status,participants(id,name,group_size,attendance_status)")
+      .select("id,date,type,platform,guide_id,created_by,status,price_per_person,participants(id,name,group_size,attendance_status)")
       .eq("id", tourId)
       .maybeSingle();
     if (tourError || !tour) return json(res, 404, { ok: false, error: "Tour not found" });
@@ -144,9 +144,11 @@ module.exports = async (req, res) => {
 
     const personsTotal = computeInvoicePersons(tour.participants || []);
     const unitPrice = Number(
-      tourType.payment_type === "free"
-        ? (tourType.fee_per_participant ?? 0)
-        : (tourType.ticket_price ?? 0)
+      tour.price_per_person ?? (
+        tourType.payment_type === "free"
+          ? (tourType.fee_per_participant ?? 0)
+          : (tourType.ticket_price ?? 0)
+      )
     );
     const commissionPct = Number(selectedPlatform.commission_percent ?? 0);
     const gross = unitPrice * personsTotal;

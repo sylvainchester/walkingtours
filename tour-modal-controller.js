@@ -144,6 +144,9 @@ export function createTourModalController(options) {
     const participantPlatforms = getPlatformsForType(typeForTour);
     const isFreeTour = typeForTour?.payment_type === "free" || /free/i.test(String(tour.type || ""));
     const feePerParticipant = Number(platformForTour?.commission_percent || typeForTour?.fee_per_participant || 0);
+    const currentPricePerPerson = Number.isFinite(Number(tour.price_per_person))
+      ? Number(tour.price_per_person)
+      : Number(isFreeTour ? feePerParticipant : (typeForTour?.ticket_price ?? 0));
     const unresolvedParticipants = (tour.participants || []).filter(
       (participant) => participant.attendance_status !== "arrived" && participant.attendance_status !== "absent"
     );
@@ -204,6 +207,50 @@ export function createTourModalController(options) {
       guideRow.appendChild(saveGuideBtn);
       modalBody.appendChild(guideRow);
     }
+
+    const canEditTourPrice = Boolean(session) && !isLocked && (isOwner || isCreator);
+    const priceRow = document.createElement("div");
+    priceRow.className = "form-row";
+
+    const priceLabel = document.createElement("div");
+    priceLabel.className = "muted participant-platform-label";
+    priceLabel.textContent = isFreeTour ? "Fee per participant" : "Price per person";
+    priceRow.appendChild(priceLabel);
+
+    const priceInput = document.createElement("input");
+    priceInput.type = "number";
+    priceInput.min = "0";
+    priceInput.step = "0.01";
+    priceInput.className = "input";
+    priceInput.value = Number.isFinite(currentPricePerPerson) ? String(currentPricePerPerson) : "";
+    priceInput.disabled = !canEditTourPrice;
+    priceRow.appendChild(priceInput);
+
+    if (canEditTourPrice) {
+      const savePriceBtn = document.createElement("button");
+      savePriceBtn.type = "button";
+      savePriceBtn.className = "ghost";
+      savePriceBtn.textContent = "Save price";
+      savePriceBtn.addEventListener("click", async () => {
+        const nextPrice = Number(priceInput.value || "");
+        if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+          alert("Enter a valid price per person.");
+          return;
+        }
+        const { error } = await supabase
+          .from("tours")
+          .update({ price_per_person: nextPrice })
+          .eq("id", tour.id);
+        if (error) {
+          alert(`Price update error: ${error.message}`);
+          return;
+        }
+        await reloadData();
+        await syncOpenTour();
+      });
+      priceRow.appendChild(savePriceBtn);
+    }
+    modalBody.appendChild(priceRow);
 
     const handleDeleteTour = async () => {
       if (!confirm("Delete this tour?")) return;
@@ -566,9 +613,9 @@ export function createTourModalController(options) {
           const liveFeePerParticipant = Number(livePlatform?.commission_percent || liveType?.fee_per_participant || feePerParticipant || 0);
 
           if (liveIsFreeTour) {
-            const typeFromDb = await loadTourTypeForTour(tour);
+          const typeFromDb = await loadTourTypeForTour(tour);
             const dbPlatform = tour.platform || getPlatformsForType(typeFromDb)[0] || null;
-            const effectiveFee = Number(dbPlatform?.commission_percent ?? typeFromDb?.fee_per_participant ?? liveFeePerParticipant ?? 0);
+            const effectiveFee = Number(tour.price_per_person ?? dbPlatform?.commission_percent ?? typeFromDb?.fee_per_participant ?? liveFeePerParticipant ?? 0);
             if (!Number.isFinite(effectiveFee) || effectiveFee <= 0) {
               alert("Fee per participant is missing for this free tour.");
               return;
@@ -657,13 +704,14 @@ export function createTourModalController(options) {
         freeRow.appendChild(saveAmountBtn);
         modalBody.appendChild(freeRow);
 
-        const computedPlatformDue = Number((arrivedPersonsCount * feePerParticipant).toFixed(2));
+        const unitFee = Number(tour.price_per_person ?? feePerParticipant ?? 0);
+        const computedPlatformDue = Number((arrivedPersonsCount * unitFee).toFixed(2));
         const platformDue = computedPlatformDue > 0
           ? computedPlatformDue
           : Number(tour.platform_due_amount || 0);
         const displayUnitFee = arrivedPersonsCount > 0
           ? Number((platformDue / arrivedPersonsCount).toFixed(2))
-          : Number(feePerParticipant || 0);
+          : Number(unitFee || 0);
         const dueText = document.createElement("div");
         dueText.className = "platform-due-note";
         dueText.textContent = `Platform due: ${money(platformDue)} (${arrivedPersonsCount} participant${arrivedPersonsCount === 1 ? "" : "s"} x ${money(displayUnitFee)})`;

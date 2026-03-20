@@ -156,7 +156,7 @@ module.exports = async (req, res) => {
     const [toursRes, typesRes, profilesRes] = await Promise.all([
       supabase
         .from("tours")
-        .select("id,date,start_time,end_time,type,guide_id,participants_locked,participants(platform_name,group_size,attendance_status)")
+        .select("id,date,start_time,end_time,type,guide_id,price_per_person,participants_locked,participants(platform_name,group_size,attendance_status)")
         .in("guide_id", guideIds)
         .eq("participants_locked", true)
         .gte("date", periodStart)
@@ -200,7 +200,7 @@ module.exports = async (req, res) => {
       );
       if (participantCount <= 0) continue;
 
-      const unitPrice = Number(type.ticket_price || 0);
+      const unitPrice = Number(tour.price_per_person ?? type.ticket_price ?? 0);
       const gross = participantCount * unitPrice;
       const commissionPct = Number(matchedPlatform.commission_percent || 0);
       const commission = (gross * commissionPct) / 100;
