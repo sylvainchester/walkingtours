@@ -38,6 +38,7 @@ let session = null;
 let sharedGuideIds = new Set();
 let sharedGuideProfiles = new Map();
 let activeType = null;
+let typeModalIsDirty = () => false;
 let draftPlatforms = [];
 let draftTemplates = [];
 
@@ -68,13 +69,20 @@ function setStatus(message) {
   if (typeStatus) typeStatus.textContent = message || "";
 }
 
+function makeId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function clearChildren(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
 function normalizePlatform(platform) {
   return {
-    id: platform.id || crypto.randomUUID(),
+    id: platform.id || makeId(),
     name: String(platform.name || "").trim(),
     commission_percent: Number(platform.commission_percent || 0),
     requires_invoice: platform.requires_invoice !== false,
@@ -89,7 +97,7 @@ function clonePlatforms(platforms) {
 
 function normalizeTemplate(template) {
   return {
-    id: template.id || crypto.randomUUID(),
+    id: template.id || makeId(),
     weekday: Number(template.weekday),
     start_time: String(template.start_time || "").slice(0, 5),
   };
@@ -327,7 +335,6 @@ function scheduledTourKey(tour) {
 async function syncScheduledTours(typeRecord) {
   const todayIso = getTodayISO();
   const desiredTours = buildScheduledTours(typeRecord);
-  const desiredKeys = new Set(desiredTours.map((tour) => scheduledTourKey(tour)));
 
   const { data: existingGenerated, error: generatedError } = await supabase
     .from("tours")
@@ -341,19 +348,6 @@ async function syncScheduledTours(typeRecord) {
   const generatedByKey = new Map(
     (existingGenerated || []).map((tour) => [scheduledTourKey(tour), tour])
   );
-
-  const deletions = (existingGenerated || [])
-    .filter((tour) => !desiredKeys.has(scheduledTourKey(tour)))
-    .map((tour) => tour.id);
-  if (deletions.length) {
-    const { error: deleteError } = await supabase
-      .from("tours")
-      .delete()
-      .in("id", deletions);
-    if (deleteError) {
-      throw new Error(`Template sync delete error: ${deleteError.message}`);
-    }
-  }
 
   if (!desiredTours.length) return;
 
@@ -429,25 +423,6 @@ async function syncScheduledTours(typeRecord) {
   }
 }
 
-async function countScheduledToursToDelete(typeRecord) {
-  const todayIso = getTodayISO();
-  const desiredTours = buildScheduledTours(typeRecord);
-  const desiredKeys = new Set(desiredTours.map((tour) => scheduledTourKey(tour)));
-
-  const { data: existingGenerated, error } = await supabase
-    .from("tours")
-    .select("id,date,source_template_id")
-    .eq("source_tour_type_id", typeRecord.id)
-    .gte("date", todayIso);
-  if (error) {
-    throw new Error(`Template sync load error: ${error.message}`);
-  }
-
-  return (existingGenerated || []).filter(
-    (tour) => !desiredKeys.has(scheduledTourKey(tour))
-  ).length;
-}
-
 async function refreshShareInviteIndicators() {
   if (!session) return;
   const { count, error } = await supabase
@@ -490,11 +465,16 @@ async function loadSharedGuides() {
   }
 }
 
-function closeTypeModal() {
+function closeTypeModal(force = false) {
   if (!typeModal || !typeModalBody) return;
+  if (!force && typeModalIsDirty()) {
+    const confirmed = confirm("Ignore your unsaved changes?");
+    if (!confirmed) return;
+  }
   typeModal.classList.remove("open");
   typeModal.setAttribute("aria-hidden", "true");
   activeType = null;
+  typeModalIsDirty = () => false;
 }
 
 function openTypeModal(type) {
@@ -693,6 +673,15 @@ function renderTypeModal(type) {
   const isOwner = type.guide_id === session.user.id;
   const platforms = clonePlatforms(type.platforms);
   const templates = cloneTemplates(type.schedule_templates);
+  const buildSnapshot = () => JSON.stringify({
+    payment_type: paymentSelect.value,
+    shareable: shareableInput.checked,
+    name: nameInput.value.trim(),
+    ticket_price: priceInput.value === "" ? null : Number(priceInput.value),
+    platforms,
+    schedule_templates: templates,
+    template_end_date: modalTemplateEndDate?.value || null,
+  });
 
   const form = document.createElement("div");
   form.className = "form-col compact-two-col";
@@ -780,6 +769,15 @@ function renderTypeModal(type) {
   typeModalBody.appendChild(templateWrapper);
   applyVisibility();
 
+  const initialSnapshot = buildSnapshot();
+  typeModalIsDirty = () => isOwner && buildSnapshot() !== initialSnapshot;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "ghost";
+  closeBtn.type = "button";
+  closeBtn.textContent = "Close";
+  closeBtn.addEventListener("click", () => closeTypeModal());
+
   if (isOwner) {
     const actions = document.createElement("div");
     actions.className = "form-row";
@@ -848,23 +846,12 @@ function renderTypeModal(type) {
       invoice_org_address: null,
     };
 
-    try {
-      const toursToDeleteCount = await countScheduledToursToDelete({
-        ...type,
-        ...payload,
-        id: type.id,
-        guide_id: type.guide_id,
-      });
-      if (toursToDeleteCount > 0) {
-        const confirmed = confirm(
-          `This change will remove ${toursToDeleteCount} future scheduled tour${toursToDeleteCount === 1 ? "" : "s"} generated by this template. Past tours will not be affected. Do you want to continue?`
-        );
-        if (!confirmed) return;
-      }
-    } catch (countError) {
-      setStatus(countError.message);
-      return;
-    }
+    const nextTypeState = {
+      ...type,
+      ...payload,
+      id: type.id,
+      guide_id: type.guide_id,
+    };
 
     const { error: updateError } = await supabase
       .from("tour_types")
@@ -924,7 +911,7 @@ function renderTypeModal(type) {
 
     setStatus("Saved.");
     await loadTypes();
-    closeTypeModal();
+    closeTypeModal(true);
     });
 
     const deleteBtn = document.createElement("button");
@@ -946,13 +933,20 @@ function renderTypeModal(type) {
       }
       setStatus("Deleted.");
       await loadTypes();
-      closeTypeModal();
+      closeTypeModal(true);
     });
 
+    actions.appendChild(closeBtn);
     actions.appendChild(saveBtn);
     actions.appendChild(deleteBtn);
     typeModalBody.appendChild(actions);
+    return;
   }
+
+  const actions = document.createElement("div");
+  actions.className = "form-row";
+  actions.appendChild(closeBtn);
+  typeModalBody.appendChild(actions);
 }
 
 async function loadTypes() {
@@ -1117,12 +1111,9 @@ if (avatarButton && avatarDropdown) {
   });
 }
 
-if (typeModalClose) typeModalClose.addEventListener("click", closeTypeModal);
 if (typeModal) {
   typeModal.addEventListener("click", (event) => {
-    if (event.target && event.target.dataset && event.target.dataset.close === "true") {
-      closeTypeModal();
-    }
+    if (event.target && event.target.dataset && event.target.dataset.close === "true") return;
   });
 }
 
