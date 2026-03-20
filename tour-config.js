@@ -320,12 +320,14 @@ function buildScheduledTours(typeRecord) {
   return generated;
 }
 
+function scheduledTourKey(tour) {
+  return `${tour.date}|${tour.start_time}|${tour.end_time}`;
+}
+
 async function syncScheduledTours(typeRecord) {
   const todayIso = getTodayISO();
   const desiredTours = buildScheduledTours(typeRecord);
-  const desiredKeys = new Set(
-    desiredTours.map((tour) => `${tour.date}|${tour.source_template_id}`)
-  );
+  const desiredKeys = new Set(desiredTours.map((tour) => scheduledTourKey(tour)));
 
   const { data: existingGenerated, error: generatedError } = await supabase
     .from("tours")
@@ -337,11 +339,11 @@ async function syncScheduledTours(typeRecord) {
   }
 
   const generatedByKey = new Map(
-    (existingGenerated || []).map((tour) => [`${tour.date}|${tour.source_template_id}`, tour])
+    (existingGenerated || []).map((tour) => [scheduledTourKey(tour), tour])
   );
 
   const deletions = (existingGenerated || [])
-    .filter((tour) => !desiredKeys.has(`${tour.date}|${tour.source_template_id}`))
+    .filter((tour) => !desiredKeys.has(scheduledTourKey(tour)))
     .map((tour) => tour.id);
   if (deletions.length) {
     const { error: deleteError } = await supabase
@@ -374,7 +376,7 @@ async function syncScheduledTours(typeRecord) {
   );
 
   const inserts = desiredTours
-    .filter((tour) => !generatedByKey.has(`${tour.date}|${tour.source_template_id}`))
+    .filter((tour) => !generatedByKey.has(scheduledTourKey(tour)))
     .filter((tour) => !occupiedSlots.has(`${tour.date}|${tour.start_time}|${tour.end_time}`))
     .map((tour) => ({
       guide_id: typeRecord.guide_id,
@@ -400,7 +402,7 @@ async function syncScheduledTours(typeRecord) {
 
   const updates = desiredTours
     .map((tour) => {
-      const existing = generatedByKey.get(`${tour.date}|${tour.source_template_id}`);
+      const existing = generatedByKey.get(scheduledTourKey(tour));
       if (!existing) return null;
       const nextPlatform = Array.isArray(typeRecord.platforms) && typeRecord.platforms.length ? typeRecord.platforms[0] : null;
       return {
@@ -430,9 +432,7 @@ async function syncScheduledTours(typeRecord) {
 async function countScheduledToursToDelete(typeRecord) {
   const todayIso = getTodayISO();
   const desiredTours = buildScheduledTours(typeRecord);
-  const desiredKeys = new Set(
-    desiredTours.map((tour) => `${tour.date}|${tour.source_template_id}`)
-  );
+  const desiredKeys = new Set(desiredTours.map((tour) => scheduledTourKey(tour)));
 
   const { data: existingGenerated, error } = await supabase
     .from("tours")
@@ -444,7 +444,7 @@ async function countScheduledToursToDelete(typeRecord) {
   }
 
   return (existingGenerated || []).filter(
-    (tour) => !desiredKeys.has(`${tour.date}|${tour.source_template_id}`)
+    (tour) => !desiredKeys.has(scheduledTourKey(tour))
   ).length;
 }
 
