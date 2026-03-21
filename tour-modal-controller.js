@@ -136,7 +136,7 @@ export function createTourModalController(options) {
     const isLocked = Boolean(tour.participants_locked);
     const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isLocked && !isPrivate;
     const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
-    const canEditTourGuide = Boolean(session) && !isPast && !isLocked && !isPrivate && (isOwner || isCreator);
+    const canEditTourGuide = Boolean(session) && !isPast && !isLocked && !isPrivate;
     const typeForTour = tourTypes.find((type) => type.guide_id === tour.guide_id && type.name === tour.type)
       || await loadTourTypeForTour(tour)
       || null;

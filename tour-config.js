@@ -329,7 +329,7 @@ function buildScheduledTours(typeRecord) {
 }
 
 function scheduledTourKey(tour) {
-  return `${tour.date}|${tour.start_time}|${tour.end_time}`;
+  return `${tour.date}|${String(tour.start_time || "").slice(0, 5)}|${String(tour.end_time || "").slice(0, 5)}`;
 }
 
 async function syncScheduledTours(typeRecord) {
@@ -366,12 +366,12 @@ async function syncScheduledTours(typeRecord) {
   const occupiedSlots = new Set(
     (allTours || [])
       .filter((tour) => tour.source_tour_type_id !== typeRecord.id)
-      .map((tour) => `${tour.date}|${tour.start_time}|${tour.end_time}`)
+      .map((tour) => scheduledTourKey(tour))
   );
 
   const inserts = desiredTours
     .filter((tour) => !generatedByKey.has(scheduledTourKey(tour)))
-    .filter((tour) => !occupiedSlots.has(`${tour.date}|${tour.start_time}|${tour.end_time}`))
+    .filter((tour) => !occupiedSlots.has(scheduledTourKey(tour)))
     .map((tour) => ({
       guide_id: typeRecord.guide_id,
       created_by: typeRecord.guide_id,

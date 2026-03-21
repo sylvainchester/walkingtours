@@ -505,7 +505,7 @@ async function renderTourModal(tour) {
   const isLocked = Boolean(tour.participants_locked);
   const canEditParticipants = Boolean(session) && tour.status === "accepted" && !isLocked && !isPrivate;
   const canDeleteTour = Boolean(session) && !isPast && (isOwner || isCreator);
-  const canEditTourGuide = Boolean(session) && !isPast && !isLocked && !isPrivate && (isOwner || isCreator);
+  const canEditTourGuide = Boolean(session) && !isPast && !isLocked && !isPrivate;
   const typeForTour = tourTypes.find((type) => type.guide_id === tour.guide_id && type.name === tour.type)
     || await loadTourTypeForTour(tour)
     || null;
@@ -1071,7 +1071,7 @@ async function handleBulkSave() {
     const isLocked = Boolean(tour.participants_locked);
     const isOwner = tour.guide_id === session.user.id;
     const isCreator = tour.created_by === session.user.id;
-    const canEditTourGuide = !isPast && !isLocked && !isPrivate && (isOwner || isCreator);
+    const canEditTourGuide = !isPast && !isLocked && !isPrivate;
     let skipReason = "";
     if (tour.guide_id === nextGuideId) {
       skipReason = "already assigned to this guide";
