@@ -26,6 +26,33 @@ function computeInvoicePersons(participants) {
   return arrived.reduce((sum, p) => sum + Number(p.group_size || 0), 0);
 }
 
+function getParticipantEffectiveAmount(participant, fallbackAmount) {
+  const direct = Number(participant?.paid_amount);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
+  const fallback = Number(fallbackAmount);
+  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
+}
+
+function computeParticipantsGross(participants, fallbackAmount) {
+  return (participants || [])
+    .filter((participant) => participant.attendance_status === "arrived")
+    .reduce(
+      (sum, participant) => sum + (Number(participant.group_size || 0) * getParticipantEffectiveAmount(participant, fallbackAmount)),
+      0
+    );
+}
+
+function getUnitPriceLabel(participants, fallbackAmount) {
+  const amounts = Array.from(new Set(
+    (participants || [])
+      .filter((participant) => participant.attendance_status === "arrived")
+      .map((participant) => Number(getParticipantEffectiveAmount(participant, fallbackAmount).toFixed(2)))
+  ));
+  if (amounts.length === 1) return money(amounts[0]);
+  if (amounts.length > 1) return "mixed rates";
+  return money(fallbackAmount || 0);
+}
+
 function replaceTokens(template, values) {
   return template.replace(/{{\s*([A-Za-z0-9_]+)\s*}}/g, (_m, key) => String(values[key] ?? ""));
 }
@@ -95,7 +122,7 @@ module.exports = async (req, res) => {
 
     const { data: tour, error: tourError } = await supabase
       .from("tours")
-      .select("id,date,type,platform,guide_id,created_by,status,price_per_person,participants(id,name,group_size,attendance_status)")
+      .select("id,date,type,platform,guide_id,created_by,status,price_per_person,participants(id,name,group_size,attendance_status,paid_amount,booked_at)")
       .eq("id", tourId)
       .maybeSingle();
     if (tourError || !tour) return json(res, 404, { ok: false, error: "Tour not found" });
@@ -143,7 +170,7 @@ module.exports = async (req, res) => {
     }
 
     const personsTotal = computeInvoicePersons(tour.participants || []);
-    const unitPrice = Number(
+    const fallbackUnitPrice = Number(
       tour.price_per_person ?? (
         tourType.payment_type === "free"
           ? (tourType.fee_per_participant ?? 0)
@@ -151,7 +178,7 @@ module.exports = async (req, res) => {
       )
     );
     const commissionPct = Number(selectedPlatform.commission_percent ?? 0);
-    const gross = unitPrice * personsTotal;
+    const gross = computeParticipantsGross(tour.participants || [], fallbackUnitPrice);
     const commission = (gross * commissionPct) / 100;
     const total = gross - commission;
 
@@ -181,7 +208,7 @@ module.exports = async (req, res) => {
       bookingRef,
       tourLabel: tour.type || "Tour",
       personsTotal,
-      pricePerPerson: money(unitPrice),
+      pricePerPerson: getUnitPriceLabel(tour.participants || [], fallbackUnitPrice),
       gross: money(gross),
       CommisionPct: commissionPct.toFixed(2),
       vicCommission: money(commission),

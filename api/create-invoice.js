@@ -83,6 +83,13 @@ function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function getParticipantEffectiveAmount(participant, fallbackAmount) {
+  const direct = Number(participant?.paid_amount);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
+  const fallback = Number(fallbackAmount);
+  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
+}
+
 function resolveTourTypeForInvoice(tour, types, platformName) {
   const normalizedTypeName = normalizeName(tour?.type);
   const normalizedPlatformName = normalizeName(platformName || tour?.platform?.name);
@@ -156,7 +163,7 @@ module.exports = async (req, res) => {
     const [toursRes, typesRes, profilesRes] = await Promise.all([
       supabase
         .from("tours")
-        .select("id,date,start_time,end_time,type,guide_id,price_per_person,participants_locked,participants(platform_name,group_size,attendance_status)")
+        .select("id,date,start_time,end_time,type,guide_id,price_per_person,participants_locked,participants(platform_name,group_size,attendance_status,paid_amount,booked_at)")
         .in("guide_id", guideIds)
         .eq("participants_locked", true)
         .gte("date", periodStart)
@@ -194,14 +201,14 @@ module.exports = async (req, res) => {
           participant.attendance_status === "arrived"
           && normalizeName(participant.platform_name) === normalizeName(platformName)
       );
-      const participantCount = arrivedParticipants.reduce(
-        (sum, participant) => sum + Number(participant.group_size || 0),
-        0
-      );
+      const participantCount = arrivedParticipants.reduce((sum, participant) => sum + Number(participant.group_size || 0), 0);
       if (participantCount <= 0) continue;
 
-      const unitPrice = Number(tour.price_per_person ?? type.ticket_price ?? 0);
-      const gross = participantCount * unitPrice;
+      const fallbackUnitPrice = Number(tour.price_per_person ?? type.ticket_price ?? 0);
+      const gross = arrivedParticipants.reduce(
+        (sum, participant) => sum + (Number(participant.group_size || 0) * getParticipantEffectiveAmount(participant, fallbackUnitPrice)),
+        0
+      );
       const commissionPct = Number(matchedPlatform.commission_percent || 0);
       const commission = (gross * commissionPct) / 100;
       const net = gross - commission;

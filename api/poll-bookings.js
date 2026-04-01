@@ -257,6 +257,29 @@ function parseJsonSafely(value) {
   }
 }
 
+function normalizeDateValue(value) {
+  if (!value) return null;
+  const direct = String(value).trim();
+  if (!direct) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(direct)) return direct;
+  const parsed = new Date(direct);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeAmountValue(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Number(value.toFixed(2)) : null;
+  }
+  const normalized = String(value)
+    .replace(/[, ]+/g, "")
+    .replace(/[^\d.-]/g, "");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : null;
+}
+
 function extractTextFromResponsePayload(payload) {
   if (!payload || typeof payload !== "object") return "";
   if (typeof payload.output_text === "string" && payload.output_text.trim()) {
@@ -484,6 +507,8 @@ async function extractWithLLM({ subject, rawText }) {
       start_time: { type: ["string", "null"] },
       end_time: { type: ["string", "null"] },
       booking_name: { type: ["string", "null"] },
+      booking_date: { type: ["string", "null"] },
+      price_per_person: { type: ["number", "string", "null"] },
       participants: {
         type: "array",
         items: {
@@ -492,8 +517,10 @@ async function extractWithLLM({ subject, rawText }) {
           properties: {
             name: { type: ["string", "null"] },
             group_size: { type: "integer" },
+            booking_date: { type: ["string", "null"] },
+            paid_amount: { type: ["number", "string", "null"] },
           },
-          required: ["name", "group_size"],
+          required: ["name", "group_size", "booking_date", "paid_amount"],
         },
       },
       confidence_notes: { type: ["string", "null"] },
@@ -505,6 +532,8 @@ async function extractWithLLM({ subject, rawText }) {
       "start_time",
       "end_time",
       "booking_name",
+      "booking_date",
+      "price_per_person",
       "participants",
       "confidence_notes",
     ],
@@ -528,6 +557,7 @@ async function extractWithLLM({ subject, rawText }) {
                 "Extract booking information from a forwarded reservation email. " +
                 "Return JSON only. Prefer the booked experience date/time over email sent date, cancellation date, or policy dates. " +
                 "Platform names may appear as abbreviations or expanded names, for example GYG and GetYourGuide. " +
+                "Extract the booking date and the amount paid per person when present. " +
                 "If a value is missing, return null. If only one booking contact exists and the total guest count is clear, " +
                 "you may use that person's name with the detected group size.",
             },
@@ -775,6 +805,8 @@ function buildParticipantsDebug(heuristicParticipants, llmExtraction, effectiveP
         .map((participant) => ({
           name: String(participant?.name || llmExtraction?.booking_name || "").trim(),
           group_size: Number(participant?.group_size || 0),
+          booked_at: normalizeDateValue(participant?.booking_date || llmExtraction?.booking_date),
+          paid_amount: normalizeAmountValue(participant?.paid_amount ?? llmExtraction?.price_per_person),
         }))
         .filter((participant) => participant.name || participant.group_size > 0)
     : [];
@@ -784,12 +816,35 @@ function buildParticipantsDebug(heuristicParticipants, llmExtraction, effectiveP
     heuristic: (heuristicParticipants || []).map((participant) => ({
       name: participant.name,
       group_size: participant.group_size,
+      booked_at: participant.booked_at || null,
+      paid_amount: participant.paid_amount ?? null,
     })),
     llm: llmParticipants,
     effective: (effectiveParticipants || []).map((participant) => ({
       name: participant.name,
       group_size: participant.group_size,
+      booked_at: participant.booked_at || null,
+      paid_amount: participant.paid_amount ?? null,
     })),
+  };
+}
+
+function getDefaultParticipantPaidAmount(tour, candidateTourTypes) {
+  const explicitTourPrice = normalizeAmountValue(tour?.price_per_person);
+  if (explicitTourPrice != null) return explicitTourPrice;
+
+  const tourType = resolveTourTypeForTour(tour, candidateTourTypes || []);
+  if (!tourType || tourType.payment_type === "free") return null;
+
+  const ticketPrice = normalizeAmountValue(tourType.ticket_price);
+  return ticketPrice != null ? ticketPrice : null;
+}
+
+function getImportedParticipantDefaults({ match, candidateTourTypes, parsedLlm, receivedAt }) {
+  return {
+    booked_at: normalizeDateValue(parsedLlm?.booking_date) || normalizeDateValue(receivedAt),
+    paid_amount: normalizeAmountValue(parsedLlm?.price_per_person)
+      ?? getDefaultParticipantPaidAmount(match?.matchedTour, candidateTourTypes),
   };
 }
 
@@ -1160,11 +1215,19 @@ module.exports = async (req, res) => {
         }
       }
       const parsedLlm = llmExtraction?.parsed || null;
+      const defaultImportedValues = getImportedParticipantDefaults({
+        match: null,
+        candidateTourTypes,
+        parsedLlm,
+        receivedAt,
+      });
       const extractedParticipants = parsedLlm?.participants
         ?.filter((participant) => participant && participant.group_size > 0)
         .map((participant) => ({
           name: String(participant.name || parsedLlm.booking_name || "").trim(),
           group_size: Number(participant.group_size),
+          booked_at: normalizeDateValue(participant.booking_date || parsedLlm.booking_date || defaultImportedValues.booked_at),
+          paid_amount: normalizeAmountValue(participant.paid_amount ?? parsedLlm.price_per_person ?? defaultImportedValues.paid_amount),
         }))
         .filter((participant) => participant.name)
         || [];
@@ -1225,10 +1288,18 @@ module.exports = async (req, res) => {
           errorMessage = "No participants detected";
         } else {
           matchedTourId = match.matchedTour.id;
+          const participantDefaults = getImportedParticipantDefaults({
+            match,
+            candidateTourTypes,
+            parsedLlm,
+            receivedAt,
+          });
           const rows = effectiveParticipants.map((participant) => ({
             name: participant.name,
             group_size: participant.group_size,
             platform_name: matchedPlatformName,
+            booked_at: normalizeDateValue(participant.booked_at || participantDefaults.booked_at),
+            paid_amount: normalizeAmountValue(participant.paid_amount ?? participantDefaults.paid_amount),
           }));
           if (dryRun) {
             status = "imported";
@@ -1236,6 +1307,8 @@ module.exports = async (req, res) => {
               name: row.name,
               group_size: row.group_size,
               platform_name: row.platform_name,
+              booked_at: row.booked_at,
+              paid_amount: row.paid_amount,
             }));
           } else {
             status = "pending_review";
@@ -1243,6 +1316,8 @@ module.exports = async (req, res) => {
               name: row.name,
               group_size: row.group_size,
               platform_name: row.platform_name,
+              booked_at: row.booked_at,
+              paid_amount: row.paid_amount,
             }));
           }
         }

@@ -22,6 +22,18 @@ function parseTime(value) {
   return value.slice(0, 5);
 }
 
+function formatParticipantMeta(participant, fallbackAmount) {
+  const parts = [];
+  const paidAmount = Number(participant?.paid_amount);
+  const fallback = Number(fallbackAmount);
+  const effectiveAmount = Number.isFinite(paidAmount)
+    ? paidAmount
+    : (Number.isFinite(fallback) ? fallback : null);
+  if (effectiveAmount != null) parts.push(`paid GBP ${effectiveAmount.toFixed(2)}`);
+  if (participant?.booked_at) parts.push(`booked ${participant.booked_at}`);
+  return parts.join(" · ");
+}
+
 async function loadTour() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get("id");
@@ -39,7 +51,7 @@ async function loadTour() {
 
   const { data: tour, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,status,guide_id,created_by,participants(id,name,group_size)")
+    .select("id,date,start_time,end_time,type,status,guide_id,created_by,price_per_person,participants(id,name,group_size,paid_amount,booked_at)")
     .eq("id", id)
     .maybeSingle();
 
@@ -124,7 +136,7 @@ function renderParticipants(tour, canEdit) {
       row.className = "participant";
 
       const name = document.createElement("div");
-      name.textContent = `${p.name} (${p.group_size})`;
+      name.textContent = `${p.name} (${p.group_size})${formatParticipantMeta(p, tour.price_per_person) ? ` · ${formatParticipantMeta(p, tour.price_per_person)}` : ""}`;
 
       row.appendChild(name);
 
@@ -159,6 +171,17 @@ function renderParticipants(tour, canEdit) {
     groupInput.value = "1";
     groupInput.className = "input";
 
+    const bookedAtInput = document.createElement("input");
+    bookedAtInput.type = "date";
+    bookedAtInput.className = "input";
+
+    const paidAmountInput = document.createElement("input");
+    paidAmountInput.type = "number";
+    paidAmountInput.min = "0";
+    paidAmountInput.step = "0.01";
+    paidAmountInput.className = "input";
+    paidAmountInput.value = tour.price_per_person == null ? "" : String(tour.price_per_person);
+
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "primary";
@@ -171,12 +194,16 @@ function renderParticipants(tour, canEdit) {
         tour_id: tour.id,
         name,
         group_size: groupSize,
+        booked_at: bookedAtInput.value || null,
+        paid_amount: paidAmountInput.value === "" ? null : Number(paidAmountInput.value),
       });
       if (!error) window.location.reload();
     });
 
     form.appendChild(nameInput);
     form.appendChild(groupInput);
+    form.appendChild(bookedAtInput);
+    form.appendChild(paidAmountInput);
     form.appendChild(addBtn);
     list.appendChild(form);
   }

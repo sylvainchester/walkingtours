@@ -31,6 +31,46 @@ export function createTourModalController(options) {
     openTourId = null;
   }
 
+  function normalizeDateValue(value) {
+    const direct = String(value || "").trim();
+    if (!direct) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(direct)) return direct;
+    const parsed = new Date(direct);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+  }
+
+  function normalizeAmountValue(value) {
+    if (value == null || value === "") return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : null;
+  }
+
+  function getParticipantAmount(participant, fallbackAmount) {
+    const direct = normalizeAmountValue(participant?.paid_amount);
+    if (direct != null) return direct;
+    const fallback = normalizeAmountValue(fallbackAmount);
+    return fallback != null ? fallback : null;
+  }
+
+  function formatParticipantMeta(participant, fallbackAmount) {
+    const parts = [];
+    if (participant.platform_name) parts.push(participant.platform_name);
+    const amount = getParticipantAmount(participant, fallbackAmount);
+    if (amount != null) parts.push(`paid ${money(amount)}`);
+    const bookedAt = normalizeDateValue(participant.booked_at);
+    if (bookedAt) parts.push(`booked ${bookedAt}`);
+    return parts.join(" · ");
+  }
+
+  function computeCollectedAmount(participants, fallbackAmount) {
+    return (participants || [])
+      .filter((participant) => participant.attendance_status === "arrived")
+      .reduce((sum, participant) => {
+        const amount = getParticipantAmount(participant, fallbackAmount);
+        return sum + (Number(participant.group_size || 0) * Number(amount || 0));
+      }, 0);
+  }
+
   async function syncOpenTour() {
     if (!openTourId) return;
     const freshTour = findTourById(openTourId);
@@ -147,6 +187,7 @@ export function createTourModalController(options) {
     const currentPricePerPerson = Number.isFinite(Number(tour.price_per_person))
       ? Number(tour.price_per_person)
       : Number(isFreeTour ? feePerParticipant : (typeForTour?.ticket_price ?? 0));
+    const defaultParticipantPaidAmount = isFreeTour ? null : currentPricePerPerson;
     const unresolvedParticipants = (tour.participants || []).filter(
       (participant) => participant.attendance_status !== "arrived" && participant.attendance_status !== "absent"
     );
@@ -214,7 +255,7 @@ export function createTourModalController(options) {
 
     const priceLabel = document.createElement("div");
     priceLabel.className = "muted participant-platform-label";
-    priceLabel.textContent = isFreeTour ? "Fee per participant" : "Price per person";
+    priceLabel.textContent = isFreeTour ? "Platform fee per participant" : "Default price per person";
     priceRow.appendChild(priceLabel);
 
     const priceInput = document.createElement("input");
@@ -230,7 +271,7 @@ export function createTourModalController(options) {
       const savePriceBtn = document.createElement("button");
       savePriceBtn.type = "button";
       savePriceBtn.className = "ghost";
-      savePriceBtn.textContent = "Save price";
+      savePriceBtn.textContent = "Save default price";
       savePriceBtn.addEventListener("click", async () => {
         const nextPrice = Number(priceInput.value || "");
         if (!Number.isFinite(nextPrice) || nextPrice < 0) {
@@ -374,13 +415,49 @@ export function createTourModalController(options) {
         const row = document.createElement("div");
         row.className = `participant${participant.attendance_status ? ` ${participant.attendance_status}` : ""}`;
 
+        const participantInfo = document.createElement("div");
+        participantInfo.className = "participant-info";
+
         const name = document.createElement("div");
-        name.textContent = `${participant.name} (${participant.group_size})${participant.platform_name ? ` · ${participant.platform_name}` : ""}`;
-        row.appendChild(name);
+        name.textContent = `${participant.name} (${participant.group_size})`;
+        participantInfo.appendChild(name);
+
+        const meta = document.createElement("div");
+        meta.className = "muted";
+        meta.textContent = formatParticipantMeta(participant, defaultParticipantPaidAmount) || "No booking metadata yet.";
+        participantInfo.appendChild(meta);
+
+        row.appendChild(participantInfo);
 
         if (canEditParticipants) {
           const actions = document.createElement("div");
-          actions.className = "form-row";
+          actions.className = "participant-actions";
+
+          const paidAmountInput = document.createElement("input");
+          paidAmountInput.type = "number";
+          paidAmountInput.min = "0";
+          paidAmountInput.step = "0.01";
+          paidAmountInput.className = "input participant-price-input";
+          const effectiveAmount = getParticipantAmount(participant, defaultParticipantPaidAmount);
+          paidAmountInput.value = effectiveAmount == null ? "" : String(effectiveAmount);
+
+          const saveBtn = document.createElement("button");
+          saveBtn.type = "button";
+          saveBtn.className = "ghost";
+          saveBtn.textContent = "Save";
+          saveBtn.addEventListener("click", async () => {
+            const payload = {
+              paid_amount: normalizeAmountValue(paidAmountInput.value),
+            };
+            const { error } = await supabase
+              .from("participants")
+              .update(payload)
+              .eq("id", participant.id);
+            if (!error) {
+              await reloadData();
+              await syncOpenTour();
+            }
+          });
 
           const arrivedBtn = document.createElement("button");
           arrivedBtn.type = "button";
@@ -431,6 +508,8 @@ export function createTourModalController(options) {
             }
           });
 
+          actions.appendChild(paidAmountInput);
+          actions.appendChild(saveBtn);
           actions.appendChild(arrivedBtn);
           actions.appendChild(absentBtn);
           actions.appendChild(removeBtn);
@@ -476,6 +555,21 @@ export function createTourModalController(options) {
       platformRow.appendChild(participantPlatformSelect);
       list.appendChild(platformRow);
 
+      const bookingMetaRow = document.createElement("div");
+      bookingMetaRow.className = "form-row participant-meta-row";
+
+      const paidAmountInput = document.createElement("input");
+      paidAmountInput.type = "number";
+      paidAmountInput.min = "0";
+      paidAmountInput.step = "0.01";
+      paidAmountInput.className = "input participant-price-input";
+      const defaultParticipantAmount = normalizeAmountValue(defaultParticipantPaidAmount);
+      paidAmountInput.value = defaultParticipantAmount == null ? "" : String(defaultParticipantAmount);
+      paidAmountInput.placeholder = "Paid per person";
+
+      bookingMetaRow.appendChild(paidAmountInput);
+      list.appendChild(bookingMetaRow);
+
       const importRow = document.createElement("div");
       importRow.className = "form-row";
 
@@ -514,12 +608,14 @@ export function createTourModalController(options) {
               return;
             }
             if (confirm(`Import ${participants.length} participants?`)) {
+              const paidAmount = normalizeAmountValue(paidAmountInput.value);
               const { error } = await supabase.from("participants").insert(
                 participants.map((participant) => ({
                   tour_id: tour.id,
                   name: participant.name,
                   group_size: participant.group_size,
                   platform_name: platformName,
+                  paid_amount: paidAmount,
                 }))
               );
               if (!error) {
@@ -575,6 +671,7 @@ export function createTourModalController(options) {
           name,
           group_size: groupSize,
           platform_name: selectedPlatformName,
+          paid_amount: normalizeAmountValue(paidAmountInput.value),
         });
         if (!error) {
           nameInput.value = "";
@@ -676,7 +773,10 @@ export function createTourModalController(options) {
         amountInput.step = "0.01";
         amountInput.className = "input";
         amountInput.placeholder = "Amount received from participants";
-        amountInput.value = tour.free_amount_received == null ? "" : String(tour.free_amount_received);
+        const computedCollectedAmount = Number(computeCollectedAmount(tour.participants || [], defaultParticipantPaidAmount).toFixed(2));
+        amountInput.value = tour.free_amount_received == null
+          ? (computedCollectedAmount > 0 ? String(computedCollectedAmount) : "")
+          : String(tour.free_amount_received);
 
         const saveAmountBtn = document.createElement("button");
         saveAmountBtn.type = "button";

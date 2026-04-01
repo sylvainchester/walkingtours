@@ -2,6 +2,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 import { ensurePushSubscription, sendPush } from "./push.js";
 import { createTourModalController } from "./tour-modal-controller.js";
+import { applyAcceptedTourStyle } from "./tour-colors.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -236,7 +237,7 @@ async function loadTours() {
   const guideIds = Array.from(sharedGuideIds);
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
+    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status,paid_amount,booked_at),guide_id,created_by,status,participants_locked")
     .in("guide_id", guideIds)
     .gte("date", getTodayISO())
     .order("date")
@@ -305,7 +306,15 @@ function renderSummaryList() {
     const isPrivate = isPrivateForViewer(tour);
     const tourIsPast = tour.date < getTodayISO();
     const acceptedColorClass = tour.status === "accepted" ? ` ${getGuideColorClass(tour.guide_id)}` : "";
-    row.className = `tour-row summary-row-main ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${tourIsPast ? " past" : ""}`;
+    const pastClass = tour.status === "pending" && tourIsPast ? " past" : "";
+    row.className = `tour-row summary-row-main ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${pastClass}`;
+    if (tour.status === "accepted") {
+      applyAcceptedTourStyle(row, {
+        guideColorClass: getGuideColorClass(tour.guide_id),
+        tourTypeName: isPrivate ? "Private tour" : tour.type,
+        isPast: tourIsPast,
+      });
+    }
     row.addEventListener("click", () => openTourModal(tour));
 
     const text = document.createElement("div");

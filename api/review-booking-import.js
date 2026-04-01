@@ -121,12 +121,19 @@ module.exports = async (req, res) => {
       return json(res, 400, { ok: false, error: "No proposed participants to import" });
     }
 
-    const rows = participants.map((participant) => ({
-      tour_id: draft.matched_tour_id,
-      name: String(participant.name || "").trim(),
-      group_size: Number(participant.group_size || 0),
-      platform_name: String(participant.platform_name || draft.matched_platform_name || "").trim() || null,
-    })).filter((participant) => participant.name && participant.group_size > 0);
+    const rows = participants.map((participant) => {
+      const paidAmount = participant.paid_amount == null || participant.paid_amount === ""
+        ? null
+        : Number(participant.paid_amount);
+      return {
+        tour_id: draft.matched_tour_id,
+        name: String(participant.name || "").trim(),
+        group_size: Number(participant.group_size || 0),
+        platform_name: String(participant.platform_name || draft.matched_platform_name || "").trim() || null,
+        booked_at: String(participant.booked_at || "").trim() || null,
+        paid_amount: Number.isFinite(paidAmount) ? paidAmount : null,
+      };
+    }).filter((participant) => participant.name && participant.group_size > 0);
 
     if (!rows.length) {
       return json(res, 400, { ok: false, error: "No valid participants to import" });

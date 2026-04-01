@@ -2,6 +2,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 import { ensurePushSubscription, sendPush } from "./push.js";
 import { createTourModalController } from "./tour-modal-controller.js";
+import { applyAcceptedTourStyle } from "./tour-colors.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -191,6 +192,15 @@ function getAcceptedToursColorClass(tours) {
   return getGuideColorClass(sortedAccepted[0].guide_id);
 }
 
+function getAcceptedToursTypeHint(tours) {
+  const acceptedTours = (tours || []).filter((tour) => tour.status === "accepted");
+  if (!acceptedTours.length) return "";
+  const uniqueTypes = new Set(
+    acceptedTours.map((tour) => String(tour.type || "").trim()).filter(Boolean)
+  );
+  return uniqueTypes.size === 1 ? Array.from(uniqueTypes)[0] : "";
+}
+
 function getVisibleToursForDate(iso) {
   const allTours = monthTours.filter((tour) => tour.date === iso);
   if (showAllTours) return allTours;
@@ -361,7 +371,7 @@ async function loadMonthTours() {
   const [toursResponse, availabilityResponse] = await Promise.all([
     supabase
       .from("tours")
-      .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status),guide_id,created_by,status,participants_locked")
+      .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status,paid_amount,booked_at),guide_id,created_by,status,participants_locked")
       .gte("date", start)
       .lte("date", end)
       .in("guide_id", guideIds)
@@ -450,7 +460,15 @@ function renderCalendar() {
     if (tours.length) {
       const indicator = document.createElement("div");
       const hasPending = tours.some((tour) => tour.status === "pending");
-      indicator.className = `tour-indicator ${hasPending ? "pending" : `accepted ${getAcceptedToursColorClass(tours)}`}`;
+      const acceptedColorClass = getAcceptedToursColorClass(tours);
+      indicator.className = `tour-indicator ${hasPending ? "pending" : `accepted ${acceptedColorClass}`}`;
+      if (!hasPending) {
+        applyAcceptedTourStyle(indicator, {
+          guideColorClass: acceptedColorClass,
+          tourTypeName: getAcceptedToursTypeHint(tours),
+          isPast: isPastDate,
+        });
+      }
       indicator.textContent = String(tours.length);
       cell.appendChild(indicator);
     }
@@ -498,7 +516,15 @@ function renderTourItem(tour) {
   const tourIsPast = tour.date < getTodayISO();
   const row = document.createElement("button");
   const acceptedColorClass = tour.status === "accepted" ? ` ${getGuideColorClass(tour.guide_id)}` : "";
-  row.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${tourIsPast ? " past" : ""}`;
+  const pastClass = tour.status === "pending" && tourIsPast ? " past" : "";
+  row.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${pastClass}`;
+  if (tour.status === "accepted") {
+    applyAcceptedTourStyle(row, {
+      guideColorClass: getGuideColorClass(tour.guide_id),
+      tourTypeName: tour.type,
+      isPast: tourIsPast,
+    });
+  }
   row.type = "button";
   row.addEventListener("click", () => openTourModal(tour));
 

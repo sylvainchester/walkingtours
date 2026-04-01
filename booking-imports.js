@@ -94,6 +94,17 @@ function formatDetectedSchedule(draft) {
   return parts.join(" · ");
 }
 
+function formatImportedParticipant(participant) {
+  const amount = participant?.paid_amount == null || participant?.paid_amount === ""
+    ? null
+    : Number(participant.paid_amount);
+  const bookingDate = String(participant?.booked_at || "").trim();
+  const extras = [];
+  if (Number.isFinite(amount)) extras.push(`GBP ${amount.toFixed(2)}`);
+  if (bookingDate) extras.push(`booked ${bookingDate}`);
+  return `${participant.name} (${participant.group_size})${extras.length ? ` - ${extras.join(" - ")}` : ""}`;
+}
+
 async function refreshDraftsAfterImportCheck() {
   await loadSharedGuides();
   await loadToursIndex();
@@ -184,7 +195,7 @@ function createDraftCard(draft, options = {}) {
   const participantsText = document.createElement("div");
   participantsText.className = "readme-line";
   participantsText.textContent = participants.length
-    ? participants.map((participant) => `${participant.name} (${participant.group_size})`).join(" · ")
+    ? participants.map((participant) => formatImportedParticipant(participant)).join(" · ")
     : "No participants proposed.";
   left.appendChild(participantsText);
 
@@ -392,7 +403,7 @@ async function reviewDraft(draftId, action) {
 }
 
 async function checkNewEmails() {
-  const apiUrl = `${getApiBaseUrl()}/api/poll-bookings?token=danslecullabalayettelemancheetletiquette&use_llm=1&_ts=${Date.now()}`;
+  const apiUrl = `${getApiBaseUrl()}/api/poll-bookings?use_llm=1&_ts=${Date.now()}`;
 
   checkNewEmailsBtn.disabled = true;
   setStatus("Checking new emails...");

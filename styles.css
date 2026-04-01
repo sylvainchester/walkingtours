@@ -1159,6 +1159,19 @@ h1 {
   background: #fffdf7;
 }
 
+.participant-info {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.participant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+
 .participant.arrived {
   background: #e6f6e6;
   border-color: #b7e2b7;
@@ -1223,6 +1236,20 @@ h1 {
 
 .participant-add-row .input[type="number"] {
   width: 84px;
+  flex: 0 0 auto;
+}
+
+.participant-meta-row {
+  flex-wrap: wrap;
+}
+
+.participant-meta-input {
+  width: 160px;
+  flex: 0 0 auto;
+}
+
+.participant-price-input {
+  width: 82px;
   flex: 0 0 auto;
 }
 
