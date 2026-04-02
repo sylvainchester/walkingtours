@@ -8,14 +8,19 @@ const marketingStart = document.getElementById("marketingStart");
 const marketingEnd = document.getElementById("marketingEnd");
 const marketingGuide = document.getElementById("marketingGuide");
 const marketingTourType = document.getElementById("marketingTourType");
+const marketingPlatform = document.getElementById("marketingPlatform");
 const marketingStatus = document.getElementById("marketingStatus");
 const marketingEmpty = document.getElementById("marketingEmpty");
 const marketingResults = document.getElementById("marketingResults");
+const marketingOverview = document.getElementById("marketingOverview");
 const marketingPie = document.getElementById("marketingPie");
 const marketingPieLabels = document.getElementById("marketingPieLabels");
 const marketingTotal = document.getElementById("marketingTotal");
 const marketingLegend = document.getElementById("marketingLegend");
 const marketingWeeks = document.getElementById("marketingWeeks");
+const marketingPlatformDetail = document.getElementById("marketingPlatformDetail");
+const marketingPlatformSummary = document.getElementById("marketingPlatformSummary");
+const marketingPlatformTours = document.getElementById("marketingPlatformTours");
 const signOutBtn = document.getElementById("signOutBtn");
 const avatarButton = document.getElementById("avatarButton");
 const avatarDropdown = document.getElementById("avatarDropdown");
@@ -43,6 +48,26 @@ function clearChildren(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
+function money(value) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+  }).format(Number(value || 0));
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function previousMonthRange() {
   const now = new Date();
   const end = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -50,6 +75,23 @@ function previousMonthRange() {
   startDate.setMonth(startDate.getMonth() - 1);
   const start = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${String(startDate.getDate()).padStart(2, "0")}`;
   return { start, end };
+}
+
+function normalizeName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function guideName(guideId) {
+  const profile = sharedGuideProfiles.get(guideId);
+  if (!profile) return "Unknown";
+  return `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || profile.email || "Unknown";
+}
+
+function getParticipantEffectiveAmount(participant, fallbackAmount) {
+  const direct = Number(participant?.paid_amount);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
+  const fallback = Number(fallbackAmount);
+  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
 }
 
 async function refreshShareInviteIndicators() {
@@ -83,12 +125,6 @@ async function loadSharedGuides() {
     .select("id,first_name,last_name,email")
     .in("id", sharedGuideIds);
   sharedGuideProfiles = new Map((profiles || []).map((profile) => [profile.id, profile]));
-}
-
-function guideName(guideId) {
-  const profile = sharedGuideProfiles.get(guideId);
-  if (!profile) return "Unknown";
-  return `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || profile.email || "Unknown";
 }
 
 function loadGuideFilter() {
@@ -135,6 +171,44 @@ async function loadTourTypes() {
     option.textContent = name;
     marketingTourType.appendChild(option);
   });
+}
+
+async function loadPlatformFilter() {
+  clearChildren(marketingPlatform);
+
+  const allOption = document.createElement("option");
+  allOption.value = "";
+  allOption.textContent = "All platforms";
+  marketingPlatform.appendChild(allOption);
+
+  const { data, error } = await supabase
+    .from("tours")
+    .select("platform,participants(platform_name)")
+    .in("guide_id", sharedGuideIds);
+
+  if (error) {
+    setStatus(`Platform load error: ${error.message}`);
+    return;
+  }
+
+  const names = new Set();
+  (data || []).forEach((tour) => {
+    const platformName = String(tour?.platform?.name || "").trim();
+    if (platformName) names.add(platformName);
+    (tour.participants || []).forEach((participant) => {
+      const participantPlatform = String(participant?.platform_name || "").trim();
+      if (participantPlatform) names.add(participantPlatform);
+    });
+  });
+
+  Array.from(names)
+    .sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }))
+    .forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      marketingPlatform.appendChild(option);
+    });
 }
 
 function renderPie(rows) {
@@ -257,6 +331,58 @@ function renderWeeklyBars(weeklyRows, platformColors) {
   });
 }
 
+function renderPlatformDetail(tours, platformName) {
+  clearChildren(marketingPlatformSummary);
+  clearChildren(marketingPlatformTours);
+
+  const totalRevenue = tours.reduce((sum, tour) => {
+    return sum + tour.participants.reduce((tourSum, participant) => {
+      return tourSum + (participant.groupSize * participant.paidAmount);
+    }, 0);
+  }, 0);
+
+  const summaryCard = document.createElement("div");
+  summaryCard.className = "marketing-platform-summary-card";
+  summaryCard.textContent = `${platformName} · total revenue ${money(totalRevenue)}`;
+  marketingPlatformSummary.appendChild(summaryCard);
+
+  tours.forEach((tour) => {
+    const card = document.createElement("div");
+    card.className = "marketing-tour-card";
+
+    const header = document.createElement("div");
+    header.className = "marketing-tour-header";
+    const participantTotal = tour.participants.reduce((sum, participant) => sum + participant.groupSize, 0);
+    const revenue = tour.participants.reduce((sum, participant) => sum + (participant.groupSize * participant.paidAmount), 0);
+    header.textContent = `${tour.date} · ${(tour.startTime || "").slice(0, 5)} · ${tour.type} · ${guideName(tour.guideId)} · ${participantTotal} people · ${money(revenue)}`;
+    card.appendChild(header);
+
+    const list = document.createElement("div");
+    list.className = "marketing-tour-participants";
+
+    tour.participants.forEach((participant) => {
+      const row = document.createElement("div");
+      row.className = `marketing-tour-participant ${participant.creationSource === "email_import" ? "is-import" : "is-manual"}`;
+      const sourceLabel = participant.creationSource === "email_import" ? "Imported" : "Created";
+      const sourceDate = participant.createdAt ? `${sourceLabel} on ${formatDateTime(participant.createdAt)}` : sourceLabel;
+
+      const badge = document.createElement("span");
+      badge.className = `marketing-source-badge ${participant.creationSource === "email_import" ? "is-import" : "is-manual"}`;
+      badge.textContent = participant.creationSource === "email_import" ? "Email" : "Manual";
+      row.appendChild(badge);
+
+      const text = document.createElement("span");
+      text.textContent = `${participant.name} · ${money(participant.paidAmount)} · ${participant.groupSize} person${participant.groupSize === 1 ? "" : "s"} · ${sourceDate}`;
+      row.appendChild(text);
+
+      list.appendChild(row);
+    });
+
+    card.appendChild(list);
+    marketingPlatformTours.appendChild(card);
+  });
+}
+
 function invalidateMarketingResults() {
   marketingResults.hidden = true;
   marketingEmpty.hidden = false;
@@ -264,6 +390,9 @@ function invalidateMarketingResults() {
   marketingPie.style.background = "#efe7c8";
   marketingTotal.textContent = "0";
   clearChildren(marketingLegend);
+  clearChildren(marketingWeeks);
+  clearChildren(marketingPlatformSummary);
+  clearChildren(marketingPlatformTours);
   setStatus("");
   runMarketingReport();
 }
@@ -273,6 +402,7 @@ async function runMarketingReport() {
   const end = marketingEnd.value;
   const selectedGuide = String(marketingGuide.value || "").trim();
   const selectedType = String(marketingTourType.value || "").trim();
+  const selectedPlatform = String(marketingPlatform.value || "").trim();
 
   if (!start || !end) {
     setStatus("Start date and end date are required.");
@@ -287,72 +417,120 @@ async function runMarketingReport() {
 
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,type,status,guide_id,participants(group_size,platform_name)")
+    .select("id,date,start_time,type,status,guide_id,price_per_person,participants(name,group_size,platform_name,paid_amount,creation_source,created_at)")
     .in("guide_id", sharedGuideIds)
     .gte("date", start)
     .lte("date", end)
     .eq("status", "accepted")
-    .order("date");
+    .order("date")
+    .order("start_time");
 
   if (error) {
     setStatus(`Marketing data error: ${error.message}`);
     return;
   }
 
-  const filteredTours = (data || []).filter((tour) => !selectedType || tour.type === selectedType);
-  const guideFilteredTours = filteredTours.filter((tour) => !selectedGuide || tour.guide_id === selectedGuide);
-  const totals = new Map();
-  const weekly = new Map();
+  const guideFilteredTours = (data || [])
+    .filter((tour) => !selectedType || tour.type === selectedType)
+    .filter((tour) => !selectedGuide || tour.guide_id === selectedGuide);
 
-  guideFilteredTours.forEach((tour) => {
-    const week = isoWeekKey(tour.date);
-    (tour.participants || []).forEach((participant) => {
-      const platform = String(participant.platform_name || "Unknown").trim() || "Unknown";
-      const groupSize = Number(participant.group_size || 0);
-      if (groupSize <= 0) return;
-      totals.set(platform, (totals.get(platform) || 0) + groupSize);
+  if (!selectedPlatform) {
+    const totals = new Map();
+    const weekly = new Map();
 
-      if (!weekly.has(week)) weekly.set(week, new Map());
-      const platformMap = weekly.get(week);
-      platformMap.set(platform, (platformMap.get(platform) || 0) + groupSize);
+    guideFilteredTours.forEach((tour) => {
+      const week = isoWeekKey(tour.date);
+      (tour.participants || []).forEach((participant) => {
+        const platformName = String(participant.platform_name || "Unknown").trim() || "Unknown";
+        const groupSize = Number(participant.group_size || 0);
+        if (groupSize <= 0) return;
+        totals.set(platformName, (totals.get(platformName) || 0) + groupSize);
+
+        if (!weekly.has(week)) weekly.set(week, new Map());
+        const platformMap = weekly.get(week);
+        platformMap.set(platformName, (platformMap.get(platformName) || 0) + groupSize);
+      });
     });
-  });
 
-  const rows = Array.from(totals.entries())
-    .map(([platform, count]) => ({ platform, count }))
-    .sort((a, b) => b.count - a.count);
+    const rows = Array.from(totals.entries())
+      .map(([platformName, count]) => ({ platform: platformName, count }))
+      .sort((left, right) => right.count - left.count);
 
-  const total = rows.reduce((sum, row) => sum + row.count, 0);
-  rows.forEach((row) => {
-    row.total = total;
-  });
+    if (!rows.length) {
+      marketingResults.hidden = true;
+      marketingEmpty.hidden = false;
+      marketingEmpty.textContent = "No participants found for these filters.";
+      setStatus("");
+      return;
+    }
 
-  if (!rows.length) {
+    marketingEmpty.hidden = true;
+    marketingResults.hidden = false;
+    marketingOverview.hidden = false;
+    marketingPlatformDetail.hidden = true;
+
+    renderPie(rows);
+    renderLegend(rows);
+    const platformColors = new Map(rows.map((row) => [row.platform, row.color]));
+    const weeklyRows = Array.from(weekly.entries())
+      .map(([week, platforms]) => {
+        const platformRows = Array.from(platforms.entries())
+          .map(([platformName, count]) => ({ platform: platformName, count }))
+          .sort((left, right) => right.count - left.count);
+        return {
+          week,
+          total: platformRows.reduce((sum, item) => sum + item.count, 0),
+          platforms: platformRows,
+        };
+      })
+      .sort((left, right) => left.week.localeCompare(right.week));
+    renderWeeklyBars(weeklyRows, platformColors);
+    setStatus("");
+    return;
+  }
+
+  const matchingTours = guideFilteredTours
+    .map((tour) => {
+      const participants = (tour.participants || [])
+        .filter((participant) => normalizeName(participant.platform_name) === normalizeName(selectedPlatform))
+        .map((participant) => ({
+          name: String(participant.name || "").trim() || "Unknown",
+          groupSize: Number(participant.group_size || 0),
+          paidAmount: getParticipantEffectiveAmount(participant, tour.price_per_person),
+          creationSource: String(participant.creation_source || "manual"),
+          createdAt: participant.created_at || null,
+        }))
+        .filter((participant) => participant.groupSize > 0);
+
+      return {
+        id: tour.id,
+        date: tour.date,
+        startTime: tour.start_time,
+        type: tour.type,
+        guideId: tour.guide_id,
+        participants,
+      };
+    })
+    .filter((tour) => tour.participants.length > 0)
+    .sort((left, right) => {
+      const dateCompare = left.date.localeCompare(right.date);
+      if (dateCompare !== 0) return dateCompare;
+      return String(left.startTime || "").localeCompare(String(right.startTime || ""));
+    });
+
+  if (!matchingTours.length) {
     marketingResults.hidden = true;
     marketingEmpty.hidden = false;
-    marketingEmpty.textContent = "No participants found for these filters.";
+    marketingEmpty.textContent = "No tours found for this platform and these filters.";
     setStatus("");
     return;
   }
 
   marketingEmpty.hidden = true;
   marketingResults.hidden = false;
-  renderPie(rows);
-  renderLegend(rows);
-  const platformColors = new Map(rows.map((row) => [row.platform, row.color]));
-  const weeklyRows = Array.from(weekly.entries())
-    .map(([week, platforms]) => {
-      const platformRows = Array.from(platforms.entries())
-        .map(([platform, count]) => ({ platform, count }))
-        .sort((a, b) => b.count - a.count);
-      return {
-        week,
-        total: platformRows.reduce((sum, item) => sum + item.count, 0),
-        platforms: platformRows,
-      };
-    })
-    .sort((a, b) => a.week.localeCompare(b.week));
-  renderWeeklyBars(weeklyRows, platformColors);
+  marketingOverview.hidden = true;
+  marketingPlatformDetail.hidden = false;
+  renderPlatformDetail(matchingTours, selectedPlatform);
   setStatus("");
 }
 
@@ -373,6 +551,7 @@ async function init() {
   await loadSharedGuides();
   loadGuideFilter();
   await loadTourTypes();
+  await loadPlatformFilter();
   await runMarketingReport();
 }
 
@@ -380,6 +559,7 @@ marketingStart?.addEventListener("change", invalidateMarketingResults);
 marketingEnd?.addEventListener("change", invalidateMarketingResults);
 marketingGuide?.addEventListener("change", invalidateMarketingResults);
 marketingTourType?.addEventListener("change", invalidateMarketingResults);
+marketingPlatform?.addEventListener("change", invalidateMarketingResults);
 
 if (signOutBtn) {
   signOutBtn.addEventListener("click", async () => {

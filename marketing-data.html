@@ -60,21 +60,33 @@
                 <option value="">All tours</option>
               </select>
             </div>
+            <div class="field marketing-type-field">
+              <label class="muted" for="marketingPlatform">Platform</label>
+              <select class="select" id="marketingPlatform">
+                <option value="">All platforms</option>
+              </select>
+            </div>
           </div>
           <div class="muted" id="marketingStatus"></div>
           <div class="marketing-empty" id="marketingEmpty">Choose filters and press submit.</div>
           <div class="marketing-results" id="marketingResults" hidden>
-            <div class="marketing-chart-wrap">
-              <div class="marketing-pie" id="marketingPie">
-                <div class="marketing-pie-labels" id="marketingPieLabels"></div>
-                <div class="marketing-pie-center">
-                  <div class="marketing-pie-total" id="marketingTotal">0</div>
-                  <div class="marketing-pie-label">participants</div>
+            <div id="marketingOverview">
+              <div class="marketing-chart-wrap">
+                <div class="marketing-pie" id="marketingPie">
+                  <div class="marketing-pie-labels" id="marketingPieLabels"></div>
+                  <div class="marketing-pie-center">
+                    <div class="marketing-pie-total" id="marketingTotal">0</div>
+                    <div class="marketing-pie-label">participants</div>
+                  </div>
                 </div>
               </div>
+              <div class="marketing-legend" id="marketingLegend"></div>
+              <div class="marketing-weeks" id="marketingWeeks"></div>
             </div>
-            <div class="marketing-legend" id="marketingLegend"></div>
-            <div class="marketing-weeks" id="marketingWeeks"></div>
+            <div class="marketing-platform-detail" id="marketingPlatformDetail" hidden>
+              <div class="marketing-platform-summary" id="marketingPlatformSummary"></div>
+              <div class="marketing-platform-tours" id="marketingPlatformTours"></div>
+            </div>
           </div>
         </div>
       </section>

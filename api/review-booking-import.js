@@ -132,6 +132,7 @@ module.exports = async (req, res) => {
         platform_name: String(participant.platform_name || draft.matched_platform_name || "").trim() || null,
         booked_at: String(participant.booked_at || "").trim() || null,
         paid_amount: Number.isFinite(paidAmount) ? paidAmount : null,
+        creation_source: "email_import",
       };
     }).filter((participant) => participant.name && participant.group_size > 0);
 

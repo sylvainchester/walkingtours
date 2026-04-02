@@ -196,6 +196,7 @@ function renderParticipants(tour, canEdit) {
         group_size: groupSize,
         booked_at: bookedAtInput.value || null,
         paid_amount: paidAmountInput.value === "" ? null : Number(paidAmountInput.value),
+        creation_source: "manual",
       });
       if (!error) window.location.reload();
     });

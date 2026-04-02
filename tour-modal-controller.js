@@ -616,6 +616,7 @@ export function createTourModalController(options) {
                   group_size: participant.group_size,
                   platform_name: platformName,
                   paid_amount: paidAmount,
+                  creation_source: "manual",
                 }))
               );
               if (!error) {
@@ -672,6 +673,7 @@ export function createTourModalController(options) {
           group_size: groupSize,
           platform_name: selectedPlatformName,
           paid_amount: normalizeAmountValue(paidAmountInput.value),
+          creation_source: "manual",
         });
         if (!error) {
           nameInput.value = "";

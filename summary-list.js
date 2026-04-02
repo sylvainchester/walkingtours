@@ -840,6 +840,7 @@ async function renderTourModal(tour) {
                 name: participant.name,
                 group_size: participant.group_size,
                 platform_name: platformName,
+                creation_source: "manual",
               }))
             );
             if (!error) {
@@ -894,6 +895,7 @@ async function renderTourModal(tour) {
         name,
         group_size: groupSize,
         platform_name: selectedPlatformName,
+        creation_source: "manual",
       });
       if (!error) {
         nameInput.value = "";
