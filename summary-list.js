@@ -814,10 +814,14 @@ async function renderTourModal(tour) {
       });
     }
     platformRow.appendChild(participantPlatformSelect);
-    list.appendChild(platformRow);
 
-    const bookingMetaRow = document.createElement("div");
-    bookingMetaRow.className = "form-row participant-meta-row";
+    const paidAmountWrap = document.createElement("div");
+    paidAmountWrap.className = "participant-price-wrap";
+
+    const paidAmountPrefix = document.createElement("span");
+    paidAmountPrefix.className = "participant-price-prefix";
+    paidAmountPrefix.textContent = "£";
+    paidAmountWrap.appendChild(paidAmountPrefix);
 
     const paidAmountInput = document.createElement("input");
     paidAmountInput.type = "number";
@@ -837,8 +841,9 @@ async function renderTourModal(tour) {
       paidAmountInput.value = nextUnitAmount == null ? "" : String(nextUnitAmount);
     });
 
-    bookingMetaRow.appendChild(paidAmountInput);
-    list.appendChild(bookingMetaRow);
+    paidAmountWrap.appendChild(paidAmountInput);
+    platformRow.appendChild(paidAmountWrap);
+    list.appendChild(platformRow);
 
     const importRow = document.createElement("div");
     importRow.className = "form-row";

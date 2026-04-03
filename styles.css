@@ -1338,8 +1338,30 @@ h1 {
 }
 
 .participant-price-input {
-  width: 82px;
+  width: 68px;
+  min-width: 0;
   flex: 0 0 auto;
+  border: 0;
+  padding-left: 0;
+  background: transparent;
+}
+
+.participant-price-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.participant-price-prefix {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--muted);
 }
 
 .modal-footer-actions {

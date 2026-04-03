@@ -272,50 +272,6 @@ export function createTourModalController(options) {
       modalBody.appendChild(guideRow);
     }
 
-    const canEditTourPrice = Boolean(session) && !isLocked && (isOwner || isCreator);
-    const priceRow = document.createElement("div");
-    priceRow.className = "form-row";
-
-    const priceLabel = document.createElement("div");
-    priceLabel.className = "muted participant-platform-label";
-    priceLabel.textContent = isFreeTour ? "Platform fee per participant" : "Default price per person";
-    priceRow.appendChild(priceLabel);
-
-    const priceInput = document.createElement("input");
-    priceInput.type = "number";
-    priceInput.min = "0";
-    priceInput.step = "0.01";
-    priceInput.className = "input";
-    priceInput.value = Number.isFinite(currentPricePerPerson) ? String(currentPricePerPerson) : "";
-    priceInput.disabled = !canEditTourPrice;
-    priceRow.appendChild(priceInput);
-
-    if (canEditTourPrice) {
-      const savePriceBtn = document.createElement("button");
-      savePriceBtn.type = "button";
-      savePriceBtn.className = "ghost";
-      savePriceBtn.textContent = "Save default price";
-      savePriceBtn.addEventListener("click", async () => {
-        const nextPrice = Number(priceInput.value || "");
-        if (!Number.isFinite(nextPrice) || nextPrice < 0) {
-          alert("Enter a valid price per person.");
-          return;
-        }
-        const { error } = await supabase
-          .from("tours")
-          .update({ price_per_person: nextPrice })
-          .eq("id", tour.id);
-        if (error) {
-          alert(`Price update error: ${error.message}`);
-          return;
-        }
-        await reloadData();
-        await syncOpenTour();
-      });
-      priceRow.appendChild(savePriceBtn);
-    }
-    modalBody.appendChild(priceRow);
-
     const handleDeleteTour = async () => {
       if (!confirm("Delete this tour?")) return;
       if (tour.invoice_path) {
@@ -583,10 +539,14 @@ export function createTourModalController(options) {
         });
       }
       platformRow.appendChild(participantPlatformSelect);
-      list.appendChild(platformRow);
 
-      const bookingMetaRow = document.createElement("div");
-      bookingMetaRow.className = "form-row participant-meta-row";
+      const paidAmountWrap = document.createElement("div");
+      paidAmountWrap.className = "participant-price-wrap";
+
+      const paidAmountPrefix = document.createElement("span");
+      paidAmountPrefix.className = "participant-price-prefix";
+      paidAmountPrefix.textContent = "£";
+      paidAmountWrap.appendChild(paidAmountPrefix);
 
       const paidAmountInput = document.createElement("input");
       paidAmountInput.type = "number";
@@ -606,8 +566,9 @@ export function createTourModalController(options) {
         paidAmountInput.value = nextUnitAmount == null ? "" : String(nextUnitAmount);
       });
 
-      bookingMetaRow.appendChild(paidAmountInput);
-      list.appendChild(bookingMetaRow);
+      paidAmountWrap.appendChild(paidAmountInput);
+      platformRow.appendChild(paidAmountWrap);
+      list.appendChild(platformRow);
 
       const importRow = document.createElement("div");
       importRow.className = "form-row";
