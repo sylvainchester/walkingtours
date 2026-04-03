@@ -104,6 +104,9 @@ function addMinutesToTime(value, minutesToAdd) {
 
 function getTourTypePricePerPerson(type, platform) {
   if (!type) return 0;
+  if (platform && platform.default_price != null && platform.default_price !== "") {
+    return Number(platform.default_price || 0);
+  }
   if (type.payment_type === "free") {
     return Number(platform?.commission_percent ?? type.fee_per_participant ?? 0);
   }
@@ -611,7 +614,7 @@ async function renderSelectedDay() {
   const startInput = document.createElement("input");
   startInput.type = "time";
   startInput.className = "input time-input";
-  startInput.value = "10:30";
+  startInput.value = "10:00";
 
   const typeSelect = createTourTypeSelect(tourTypes[0]?.id);
   const addBtn = document.createElement("button");

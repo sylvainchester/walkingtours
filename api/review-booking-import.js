@@ -48,6 +48,28 @@ function buildSharedGuideIds(rows, callerId) {
   return Array.from(ids);
 }
 
+function normalizeName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeAmountValue(value) {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : null;
+}
+
+function getPlatformDefaultPrice(type, tour, platformName) {
+  const normalizedPlatformName = normalizeName(platformName);
+  const platforms = Array.isArray(type?.platforms) ? type.platforms : [];
+  const matchedPlatform = platforms.find(
+    (platform) => normalizeName(platform?.name) === normalizedPlatformName
+  ) || (normalizeName(tour?.platform?.name) === normalizedPlatformName ? tour.platform : null);
+
+  return normalizeAmountValue(matchedPlatform?.default_price)
+    ?? normalizeAmountValue(tour?.price_per_person)
+    ?? normalizeAmountValue(type?.ticket_price);
+}
+
 module.exports = async (req, res) => {
   if (req.method === "OPTIONS") return json(res, 200, { ok: true });
   if (req.method !== "POST") return json(res, 405, { ok: false, error: "Method not allowed" });
@@ -108,7 +130,7 @@ module.exports = async (req, res) => {
 
     const { data: tour, error: tourError } = await supabase
       .from("tours")
-      .select("id,guide_id")
+      .select("id,guide_id,type,platform,price_per_person")
       .eq("id", draft.matched_tour_id)
       .single();
     if (tourError || !tour) return json(res, 404, { ok: false, error: "Matched tour not found" });
@@ -121,23 +143,35 @@ module.exports = async (req, res) => {
       return json(res, 400, { ok: false, error: "No proposed participants to import" });
     }
 
+    const { data: tourType } = await supabase
+      .from("tour_types")
+      .select("name,ticket_price,platforms")
+      .eq("guide_id", tour.guide_id)
+      .eq("name", tour.type)
+      .maybeSingle();
+
     const rows = participants.map((participant) => {
-      const paidAmount = participant.paid_amount == null || participant.paid_amount === ""
-        ? null
-        : Number(participant.paid_amount);
+      const groupSize = Number(participant.group_size || 0);
+      const platformName = String(participant.platform_name || draft.matched_platform_name || "").trim() || null;
+      const unitAmount = getPlatformDefaultPrice(tourType, tour, platformName);
       return {
         tour_id: draft.matched_tour_id,
         name: String(participant.name || "").trim(),
-        group_size: Number(participant.group_size || 0),
-        platform_name: String(participant.platform_name || draft.matched_platform_name || "").trim() || null,
+        group_size: groupSize,
+        platform_name: platformName,
         booked_at: String(participant.booked_at || "").trim() || null,
-        paid_amount: Number.isFinite(paidAmount) ? paidAmount : null,
+        paid_amount: unitAmount == null || groupSize <= 0
+          ? null
+          : Number((unitAmount * groupSize).toFixed(2)),
         creation_source: "email_import",
       };
     }).filter((participant) => participant.name && participant.group_size > 0);
 
     if (!rows.length) {
       return json(res, 400, { ok: false, error: "No valid participants to import" });
+    }
+    if (rows.some((participant) => participant.paid_amount == null)) {
+      return json(res, 400, { ok: false, error: "No default platform price configured for one or more participants" });
     }
 
     const { error: insertError } = await supabase.from("participants").insert(rows);

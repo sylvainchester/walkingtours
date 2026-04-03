@@ -91,7 +91,8 @@ function getParticipantEffectiveAmount(participant, fallbackAmount) {
   const direct = Number(participant?.paid_amount);
   if (Number.isFinite(direct) && direct >= 0) return direct;
   const fallback = Number(fallbackAmount);
-  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
+  const groupSize = Math.max(1, Number(participant?.group_size || 1));
+  return Number.isFinite(fallback) && fallback >= 0 ? Number((fallback * groupSize).toFixed(2)) : 0;
 }
 
 async function refreshShareInviteIndicators() {
@@ -337,7 +338,7 @@ function renderPlatformDetail(tours, platformName) {
 
   const totalRevenue = tours.reduce((sum, tour) => {
     return sum + tour.participants.reduce((tourSum, participant) => {
-      return tourSum + (participant.groupSize * participant.paidAmount);
+      return tourSum + participant.paidAmount;
     }, 0);
   }, 0);
 
@@ -353,7 +354,7 @@ function renderPlatformDetail(tours, platformName) {
     const header = document.createElement("div");
     header.className = "marketing-tour-header";
     const participantTotal = tour.participants.reduce((sum, participant) => sum + participant.groupSize, 0);
-    const revenue = tour.participants.reduce((sum, participant) => sum + (participant.groupSize * participant.paidAmount), 0);
+    const revenue = tour.participants.reduce((sum, participant) => sum + participant.paidAmount, 0);
     header.textContent = `${tour.date} · ${(tour.startTime || "").slice(0, 5)} · ${tour.type} · ${guideName(tour.guideId)} · ${participantTotal} people · ${money(revenue)}`;
     card.appendChild(header);
 

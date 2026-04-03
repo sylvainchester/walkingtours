@@ -23,6 +23,7 @@ const feePerParticipantField = document.getElementById("feePerParticipantField")
 const platformSection = document.getElementById("platformSection");
 const platformRateLabel = document.getElementById("platformRateLabel");
 const platformName = document.getElementById("platformName");
+const platformDefaultPrice = document.getElementById("platformDefaultPrice");
 const platformCommission = document.getElementById("platformCommission");
 const platformRequiresInvoice = document.getElementById("platformRequiresInvoice");
 const platformEmail = document.getElementById("platformEmail");
@@ -54,7 +55,7 @@ const weekdayOptions = [
 
 function bindFocusScroll() {
   const fields = document.querySelectorAll(
-    "#typeName, #ticketPrice, #platformName, #platformCommission, #platformEmail, #paymentType, #templateEndDate, #templateWeekday, #templateTime"
+    "#typeName, #ticketPrice, #platformName, #platformDefaultPrice, #platformCommission, #platformEmail, #paymentType, #templateEndDate, #templateWeekday, #templateTime"
   );
   fields.forEach((field) => {
     field.addEventListener("focus", () => {
@@ -84,6 +85,9 @@ function normalizePlatform(platform) {
   return {
     id: platform.id || makeId(),
     name: String(platform.name || "").trim(),
+    default_price: platform.default_price == null || platform.default_price === ""
+      ? null
+      : Number(platform.default_price),
     commission_percent: Number(platform.commission_percent || 0),
     requires_invoice: platform.requires_invoice !== false,
     email: String(platform.email || "").trim() || null,
@@ -91,8 +95,15 @@ function normalizePlatform(platform) {
   };
 }
 
-function clonePlatforms(platforms) {
-  return Array.isArray(platforms) ? platforms.map((platform) => normalizePlatform(platform)) : [];
+function clonePlatforms(platforms, fallbackDefaultPrice = null) {
+  return Array.isArray(platforms)
+    ? platforms.map((platform) => normalizePlatform({
+        ...platform,
+        default_price: platform.default_price == null
+          ? (fallbackDefaultPrice ?? platform.commission_percent ?? null)
+          : platform.default_price,
+      }))
+    : [];
 }
 
 function normalizeTemplate(template) {
@@ -123,6 +134,9 @@ function addMinutesToTime(value, minutesToAdd) {
 
 function getTypePricePerPerson(typeRecord, platform) {
   if (!typeRecord) return 0;
+  if (platform && platform.default_price != null && platform.default_price !== "") {
+    return Number(platform.default_price || 0);
+  }
   if (typeRecord.payment_type === "free") {
     return Number(platform?.commission_percent ?? typeRecord.fee_per_participant ?? 0);
   }
@@ -158,7 +172,7 @@ function populateTimeSelect(select) {
   }
 }
 
-function renderPlatformsList(target, platforms, onRemove, readOnly = false) {
+function renderPlatformsList(target, platforms, onRemove, readOnly = false, onUpdate = null) {
   clearChildren(target);
   if (!platforms.length) {
     const empty = document.createElement("div");
@@ -174,8 +188,26 @@ function renderPlatformsList(target, platforms, onRemove, readOnly = false) {
 
     const text = document.createElement("div");
     const invoiceLabel = platform.requires_invoice ? "invoice" : "no invoice";
-    text.textContent = `${platform.name} · ${platform.commission_percent}% · ${invoiceLabel}`;
+    text.textContent = `${platform.name} · default GBP ${Number(platform.default_price || 0).toFixed(2)} · ${platform.commission_percent}% · ${invoiceLabel}`;
     row.appendChild(text);
+
+    if (!readOnly) {
+      if (onUpdate) {
+        const priceInput = document.createElement("input");
+        priceInput.type = "number";
+        priceInput.step = "0.01";
+        priceInput.min = "0";
+        priceInput.className = "input platform-inline-price";
+        priceInput.value = platform.default_price == null ? "" : String(platform.default_price);
+        priceInput.addEventListener("change", () => {
+          onUpdate(index, {
+            ...platform,
+            default_price: priceInput.value === "" ? null : Number(priceInput.value),
+          });
+        });
+        row.appendChild(priceInput);
+      }
+    }
 
     if (!readOnly && onRemove) {
       const removeBtn = document.createElement("button");
@@ -223,6 +255,7 @@ function renderTemplatesList(target, templates, onRemove, readOnly = false) {
 
 function clearPlatformDraftInputs() {
   platformName.value = "";
+  platformDefaultPrice.value = "";
   platformCommission.value = "";
   platformRequiresInvoice.checked = true;
   platformEmail.value = "";
@@ -235,9 +268,14 @@ function clearTemplateDraftInputs() {
 
 function addDraftPlatform() {
   const name = platformName.value.trim();
+  const defaultPriceValue = Number(platformDefaultPrice.value || "");
   const commissionValue = Number(platformCommission.value || "");
   if (!name) {
     setStatus("Platform name is required.");
+    return;
+  }
+  if (!Number.isFinite(defaultPriceValue) || defaultPriceValue < 0) {
+    setStatus("Platform default price must be a valid number.");
     return;
   }
   if (!Number.isFinite(commissionValue) || commissionValue < 0) {
@@ -246,6 +284,7 @@ function addDraftPlatform() {
   }
   draftPlatforms.push(normalizePlatform({
     name,
+    default_price: defaultPriceValue,
     commission_percent: commissionValue,
     requires_invoice: platformRequiresInvoice.checked,
     email: platformEmail.value,
@@ -259,6 +298,9 @@ function addDraftPlatform() {
 function renderDraftPlatforms() {
   renderPlatformsList(platformsDraftList, draftPlatforms, (index) => {
     draftPlatforms.splice(index, 1);
+    renderDraftPlatforms();
+  }, false, (index, nextPlatform) => {
+    draftPlatforms[index] = normalizePlatform(nextPlatform);
     renderDraftPlatforms();
   });
 }
@@ -293,11 +335,14 @@ function addDraftTemplate() {
 
 function applyNewTypeVisibility() {
   const isFree = paymentType.value === "free";
-  ticketPriceField.style.display = isFree ? "none" : "";
+  ticketPriceField.style.display = "none";
   feePerParticipantField.style.display = "none";
   platformSection.style.display = "";
   if (platformRateLabel) {
     platformRateLabel.textContent = isFree ? "Fee per participant" : "Commission %";
+  }
+  if (platformDefaultPrice) {
+    platformDefaultPrice.placeholder = isFree ? "Default fee" : "Default price";
   }
   platformCommission.placeholder = isFree ? "Fee per participant" : "Commission %";
 }
@@ -496,7 +541,10 @@ function buildModalPlatformSection(platforms, isOwner) {
     renderPlatformsList(list, platforms, (index) => {
       platforms.splice(index, 1);
       refresh();
-    }, !isOwner);
+    }, !isOwner, (index, nextPlatform) => {
+      platforms[index] = normalizePlatform(nextPlatform);
+      refresh();
+    });
   };
   refresh();
   wrapper.appendChild(list);
@@ -527,6 +575,12 @@ function buildModalPlatformSection(platforms, isOwner) {
   commissionInput.step = "0.01";
   commissionInput.placeholder = "Commission %";
 
+  const defaultPriceInput = document.createElement("input");
+  defaultPriceInput.className = "input";
+  defaultPriceInput.type = "number";
+  defaultPriceInput.step = "0.01";
+  defaultPriceInput.placeholder = "Default price";
+
   const invoiceInput = document.createElement("input");
   invoiceInput.className = "checkbox";
   invoiceInput.type = "checkbox";
@@ -546,6 +600,7 @@ function buildModalPlatformSection(platforms, isOwner) {
   rateField.appendChild(commissionInput);
 
   form.appendChild(makeField("Platform name", nameInput));
+  form.appendChild(makeField("Default price", defaultPriceInput));
   form.appendChild(rateField);
   form.appendChild(makeField("Invoice required", invoiceInput));
   form.appendChild(makeField("Email", emailInput));
@@ -559,9 +614,14 @@ function buildModalPlatformSection(platforms, isOwner) {
   addBtn.textContent = "Add platform";
   addBtn.addEventListener("click", () => {
     const name = nameInput.value.trim();
+    const defaultPriceValue = Number(defaultPriceInput.value || "");
     const commissionValue = Number(commissionInput.value || "");
     if (!name) {
       setStatus("Platform name is required.");
+      return;
+    }
+    if (!Number.isFinite(defaultPriceValue) || defaultPriceValue < 0) {
+      setStatus("Platform default price must be a valid number.");
       return;
     }
     if (!Number.isFinite(commissionValue) || commissionValue < 0) {
@@ -570,12 +630,14 @@ function buildModalPlatformSection(platforms, isOwner) {
     }
     platforms.push(normalizePlatform({
       name,
+      default_price: defaultPriceValue,
       commission_percent: commissionValue,
       requires_invoice: invoiceInput.checked,
       email: emailInput.value,
       description: null,
     }));
     nameInput.value = "";
+    defaultPriceInput.value = "";
     commissionInput.value = "";
     invoiceInput.checked = true;
     emailInput.value = "";
@@ -671,13 +733,16 @@ function buildModalTemplateSection(templates, endDateValue, isOwner) {
 function renderTypeModal(type) {
   clearChildren(typeModalBody);
   const isOwner = type.guide_id === session.user.id;
-  const platforms = clonePlatforms(type.platforms);
+  const legacyDefaultPrice = type.payment_type === "free"
+    ? type.fee_per_participant
+    : type.ticket_price;
+  const platforms = clonePlatforms(type.platforms, legacyDefaultPrice);
   const templates = cloneTemplates(type.schedule_templates);
   const buildSnapshot = () => JSON.stringify({
     payment_type: paymentSelect.value,
     shareable: shareableInput.checked,
     name: nameInput.value.trim(),
-    ticket_price: priceInput.value === "" ? null : Number(priceInput.value),
+    ticket_price: getTypePricePerPerson({ payment_type: paymentSelect.value, ticket_price: priceInput.value }, platforms[0] || null),
     platforms,
     schedule_templates: templates,
     template_end_date: modalTemplateEndDate?.value || null,
@@ -746,7 +811,7 @@ function renderTypeModal(type) {
 
   const applyVisibility = () => {
     const isFree = paymentSelect.value === "free";
-    priceWrap.style.display = isFree ? "none" : "";
+    priceWrap.style.display = "none";
     platformTitle.style.display = "";
     platformWrapper.style.display = "";
     if (modalRateLabel) {
@@ -755,6 +820,10 @@ function renderTypeModal(type) {
     if (modalRateInput) {
       modalRateInput.placeholder = isFree ? "Fee per participant" : "Commission %";
     }
+    const modalDefaultPriceInputs = platformWrapper.querySelectorAll(".platform-inline-price");
+    modalDefaultPriceInputs.forEach((input) => {
+      input.placeholder = isFree ? "Default fee" : "Default price";
+    });
   };
   paymentSelect.addEventListener("change", applyVisibility);
 
@@ -799,10 +868,6 @@ function renderTypeModal(type) {
         return;
       }
     } else {
-      if (priceInput.value === "") {
-        setStatus("Ticket price is required for pre-paid tours.");
-        return;
-      }
       if (!platforms.length) {
         setStatus("Add at least one platform for a pre-paid tour.");
         return;
@@ -836,7 +901,9 @@ function renderTypeModal(type) {
       shareable: shareableInput.checked,
       name,
       description: type.description || null,
-      ticket_price: isFree ? null : Number(priceInput.value),
+      ticket_price: isFree
+        ? null
+        : getTypePricePerPerson({ payment_type: paymentSelect.value, ticket_price: priceInput.value }, platforms[0] || null),
       fee_per_participant: null,
       platforms,
       schedule_templates: templates,
@@ -995,10 +1062,6 @@ async function addNewType() {
     setStatus("Tour name is required.");
     return;
   }
-  if (!isFree && ticketPrice.value === "") {
-    setStatus("Ticket price is required for pre-paid tours.");
-    return;
-  }
   if (!draftPlatforms.length) {
     setStatus(`Add at least one platform for a ${isFree ? "free" : "pre-paid"} tour.`);
     return;
@@ -1029,7 +1092,9 @@ async function addNewType() {
     shareable: typeShareable ? typeShareable.checked : true,
     name,
     description: null,
-    ticket_price: isFree ? null : Number(ticketPrice.value),
+    ticket_price: isFree
+      ? null
+      : getTypePricePerPerson({ payment_type: paymentType.value, ticket_price: ticketPrice.value }, draftPlatforms[0] || null),
     fee_per_participant: null,
     platforms: draftPlatforms,
     schedule_templates: draftTemplates,

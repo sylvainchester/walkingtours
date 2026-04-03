@@ -806,7 +806,7 @@ function buildParticipantsDebug(heuristicParticipants, llmExtraction, effectiveP
           name: String(participant?.name || llmExtraction?.booking_name || "").trim(),
           group_size: Number(participant?.group_size || 0),
           booked_at: normalizeDateValue(participant?.booking_date || llmExtraction?.booking_date),
-          paid_amount: normalizeAmountValue(participant?.paid_amount ?? llmExtraction?.price_per_person),
+          paid_amount: null,
         }))
         .filter((participant) => participant.name || participant.group_size > 0)
     : [];
@@ -829,11 +829,21 @@ function buildParticipantsDebug(heuristicParticipants, llmExtraction, effectiveP
   };
 }
 
-function getDefaultParticipantPaidAmount(tour, candidateTourTypes) {
+function getDefaultParticipantPaidAmount(tour, candidateTourTypes, platformName) {
+  const tourType = resolveTourTypeForTour(tour, candidateTourTypes || []);
+  const platforms = Array.isArray(tourType?.platforms) ? tourType.platforms : [];
+  const normalizedPlatformName = normalizePlatformKey(platformName || tour?.platform?.name);
+  const matchedPlatform = platforms.find((platform) => normalizePlatformKey(platform?.name) === normalizedPlatformName)
+    || tour?.platform
+    || platforms[0]
+    || null;
+
+  const platformDefaultPrice = normalizeAmountValue(matchedPlatform?.default_price);
+  if (platformDefaultPrice != null) return platformDefaultPrice;
+
   const explicitTourPrice = normalizeAmountValue(tour?.price_per_person);
   if (explicitTourPrice != null) return explicitTourPrice;
 
-  const tourType = resolveTourTypeForTour(tour, candidateTourTypes || []);
   if (!tourType || tourType.payment_type === "free") return null;
 
   const ticketPrice = normalizeAmountValue(tourType.ticket_price);
@@ -843,9 +853,21 @@ function getDefaultParticipantPaidAmount(tour, candidateTourTypes) {
 function getImportedParticipantDefaults({ match, candidateTourTypes, parsedLlm, receivedAt }) {
   return {
     booked_at: normalizeDateValue(parsedLlm?.booking_date) || normalizeDateValue(receivedAt),
-    paid_amount: normalizeAmountValue(parsedLlm?.price_per_person)
-      ?? getDefaultParticipantPaidAmount(match?.matchedTour, candidateTourTypes),
+    paid_amount: getDefaultParticipantPaidAmount(
+      match?.matchedTour,
+      candidateTourTypes,
+      match?.matchedPlatform
+    ),
   };
+}
+
+function computeImportedParticipantPaidAmount(unitAmount, groupSize) {
+  const normalizedUnitAmount = normalizeAmountValue(unitAmount);
+  const normalizedGroupSize = Number(groupSize || 0);
+  if (normalizedUnitAmount == null || !Number.isFinite(normalizedGroupSize) || normalizedGroupSize <= 0) {
+    return null;
+  }
+  return Number((normalizedUnitAmount * normalizedGroupSize).toFixed(2));
 }
 
 function buildRecognizedEmailsForProfile(profile) {
@@ -1299,7 +1321,7 @@ module.exports = async (req, res) => {
             group_size: participant.group_size,
             platform_name: matchedPlatformName,
             booked_at: normalizeDateValue(participant.booked_at || participantDefaults.booked_at),
-            paid_amount: normalizeAmountValue(participant.paid_amount ?? participantDefaults.paid_amount),
+            paid_amount: computeImportedParticipantPaidAmount(participantDefaults.paid_amount, participant.group_size),
           }));
           if (dryRun) {
             status = "imported";

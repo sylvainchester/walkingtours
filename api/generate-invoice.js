@@ -30,14 +30,15 @@ function getParticipantEffectiveAmount(participant, fallbackAmount) {
   const direct = Number(participant?.paid_amount);
   if (Number.isFinite(direct) && direct >= 0) return direct;
   const fallback = Number(fallbackAmount);
-  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
+  const groupSize = Math.max(1, Number(participant?.group_size || 1));
+  return Number.isFinite(fallback) && fallback >= 0 ? Number((fallback * groupSize).toFixed(2)) : 0;
 }
 
 function computeParticipantsGross(participants, fallbackAmount) {
   return (participants || [])
     .filter((participant) => participant.attendance_status === "arrived")
     .reduce(
-      (sum, participant) => sum + (Number(participant.group_size || 0) * getParticipantEffectiveAmount(participant, fallbackAmount)),
+      (sum, participant) => sum + getParticipantEffectiveAmount(participant, fallbackAmount),
       0
     );
 }
@@ -46,7 +47,11 @@ function getUnitPriceLabel(participants, fallbackAmount) {
   const amounts = Array.from(new Set(
     (participants || [])
       .filter((participant) => participant.attendance_status === "arrived")
-      .map((participant) => Number(getParticipantEffectiveAmount(participant, fallbackAmount).toFixed(2)))
+      .map((participant) => {
+        const groupSize = Math.max(1, Number(participant.group_size || 1));
+        const totalAmount = getParticipantEffectiveAmount(participant, fallbackAmount);
+        return Number((totalAmount / groupSize).toFixed(2));
+      })
   ));
   if (amounts.length === 1) return money(amounts[0]);
   if (amounts.length > 1) return "mixed rates";
@@ -161,7 +166,10 @@ module.exports = async (req, res) => {
       return json(res, 400, { ok: false, error: "Free tours do not generate invoices" });
     }
     const platforms = Array.isArray(tourType.platforms) ? tourType.platforms : [];
-    const selectedPlatform = tour.platform || platforms[0] || null;
+    const selectedPlatform = platforms.find(
+      (platform) => String(platform?.name || "").trim().toLowerCase()
+        === String(tour?.platform?.name || "").trim().toLowerCase()
+    ) || tour.platform || platforms[0] || null;
     if (!selectedPlatform) {
       return json(res, 400, { ok: false, error: "No platform configured for this tour" });
     }
@@ -171,7 +179,7 @@ module.exports = async (req, res) => {
 
     const personsTotal = computeInvoicePersons(tour.participants || []);
     const fallbackUnitPrice = Number(
-      tour.price_per_person ?? (
+      tour.price_per_person ?? selectedPlatform.default_price ?? (
         tourType.payment_type === "free"
           ? (tourType.fee_per_participant ?? 0)
           : (tourType.ticket_price ?? 0)

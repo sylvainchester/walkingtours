@@ -26,9 +26,10 @@ function formatParticipantMeta(participant, fallbackAmount) {
   const parts = [];
   const paidAmount = Number(participant?.paid_amount);
   const fallback = Number(fallbackAmount);
+  const groupSize = Math.max(1, Number(participant?.group_size || 1));
   const effectiveAmount = Number.isFinite(paidAmount)
     ? paidAmount
-    : (Number.isFinite(fallback) ? fallback : null);
+    : (Number.isFinite(fallback) ? Number((fallback * groupSize).toFixed(2)) : null);
   if (effectiveAmount != null) parts.push(`paid GBP ${effectiveAmount.toFixed(2)}`);
   if (participant?.booked_at) parts.push(`booked ${participant.booked_at}`);
   return parts.join(" · ");
@@ -190,12 +191,17 @@ function renderParticipants(tour, canEdit) {
       const name = nameInput.value.trim();
       const groupSize = Number(groupInput.value || 1);
       if (!name) return;
+      const unitAmount = paidAmountInput.value === "" ? null : Number(paidAmountInput.value);
+      if (!Number.isFinite(unitAmount) || unitAmount < 0) {
+        alert("Enter a price per person.");
+        return;
+      }
       const { error } = await supabase.from("participants").insert({
         tour_id: tour.id,
         name,
         group_size: groupSize,
         booked_at: bookedAtInput.value || null,
-        paid_amount: paidAmountInput.value === "" ? null : Number(paidAmountInput.value),
+        paid_amount: Number((unitAmount * Math.max(1, Number(groupSize || 1))).toFixed(2)),
         creation_source: "manual",
       });
       if (!error) window.location.reload();

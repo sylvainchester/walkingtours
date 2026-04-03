@@ -342,6 +342,12 @@ function getPlatformsForType(type) {
   return Array.isArray(type.platforms) ? type.platforms : [];
 }
 
+function normalizeAmountValue(value) {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : null;
+}
+
 async function loadTourTypeForTour(tour) {
   const { data } = await supabase
     .from("tour_types")
@@ -521,7 +527,12 @@ async function renderTourModal(tour) {
   const platformForTour = tour.platform || getPlatformsForType(typeForTour)[0] || null;
   const participantPlatforms = getPlatformsForType(typeForTour);
   const isFreeTour = typeForTour?.payment_type === "free" || /free/i.test(String(tour.type || ""));
-  const feePerParticipant = Number(platformForTour?.commission_percent || typeForTour?.fee_per_participant || 0);
+  const feePerParticipant = Number(
+    platformForTour?.default_price ?? platformForTour?.commission_percent ?? typeForTour?.fee_per_participant ?? 0
+  );
+  const defaultParticipantUnitAmount = normalizeAmountValue(
+    platformForTour?.default_price ?? tour.price_per_person ?? (isFreeTour ? null : typeForTour?.ticket_price)
+  );
   const unresolvedParticipants = (tour.participants || []).filter(
     (participant) => participant.attendance_status !== "arrived" && participant.attendance_status !== "absent"
   );
@@ -540,6 +551,15 @@ async function renderTourModal(tour) {
     && unresolvedParticipants.length === 0
     && arrivedParticipants.length > 0
     && (isOwner || isCreator);
+
+  const getPlatformUnitPriceByName = (platformName) => {
+    const normalizedPlatformName = String(platformName || "").trim().toLowerCase();
+    const matchedPlatform = participantPlatforms.find(
+      (platform) => String(platform?.name || "").trim().toLowerCase() === normalizedPlatformName
+    ) || platformForTour || null;
+    const platformPrice = normalizeAmountValue(matchedPlatform?.default_price);
+    return platformPrice != null ? platformPrice : defaultParticipantUnitAmount;
+  };
 
   if (canEditTourGuide) {
     const guideRow = document.createElement("div");
@@ -796,6 +816,30 @@ async function renderTourModal(tour) {
     platformRow.appendChild(participantPlatformSelect);
     list.appendChild(platformRow);
 
+    const bookingMetaRow = document.createElement("div");
+    bookingMetaRow.className = "form-row participant-meta-row";
+
+    const paidAmountInput = document.createElement("input");
+    paidAmountInput.type = "number";
+    paidAmountInput.min = "0";
+    paidAmountInput.step = "0.01";
+    paidAmountInput.className = "input participant-price-input";
+    const defaultUnitAmount = normalizeAmountValue(
+      getPlatformUnitPriceByName(participantPlatformSelect.value)
+    );
+    paidAmountInput.value = defaultUnitAmount == null ? "" : String(defaultUnitAmount);
+    paidAmountInput.placeholder = "Price/person";
+
+    participantPlatformSelect.addEventListener("change", () => {
+      const nextUnitAmount = normalizeAmountValue(
+        getPlatformUnitPriceByName(participantPlatformSelect.value)
+      );
+      paidAmountInput.value = nextUnitAmount == null ? "" : String(nextUnitAmount);
+    });
+
+    bookingMetaRow.appendChild(paidAmountInput);
+    list.appendChild(bookingMetaRow);
+
     const importRow = document.createElement("div");
     importRow.className = "form-row";
 
@@ -834,12 +878,18 @@ async function renderTourModal(tour) {
             return;
           }
           if (confirm(`Import ${participants.length} participants?`)) {
+            const unitAmount = normalizeAmountValue(paidAmountInput.value);
+            if (unitAmount == null) {
+              importStatus.textContent = "Enter a price per person first.";
+              return;
+            }
             const { error } = await supabase.from("participants").insert(
               participants.map((participant) => ({
                 tour_id: tour.id,
                 name: participant.name,
                 group_size: participant.group_size,
                 platform_name: platformName,
+                paid_amount: Number((unitAmount * Math.max(1, Number(participant.group_size || 1))).toFixed(2)),
                 creation_source: "manual",
               }))
             );
@@ -890,11 +940,17 @@ async function renderTourModal(tour) {
         alert("Select a platform first.");
         return;
       }
+      const unitAmount = normalizeAmountValue(paidAmountInput.value);
+      if (unitAmount == null) {
+        alert("Enter a price per person.");
+        return;
+      }
       const { error } = await supabase.from("participants").insert({
         tour_id: tour.id,
         name,
         group_size: groupSize,
         platform_name: selectedPlatformName,
+        paid_amount: Number((unitAmount * Math.max(1, Number(groupSize || 1))).toFixed(2)),
         creation_source: "manual",
       });
       if (!error) {
@@ -930,12 +986,16 @@ async function renderTourModal(tour) {
         const nameSuggestsFree = /free/i.test(String(tour.type || ""));
         const liveIsFreeTour = liveType?.payment_type === "free" || nameSuggestsFree;
         const livePlatform = tour.platform || getPlatformsForType(liveType)[0] || null;
-        const liveFeePerParticipant = Number(livePlatform?.commission_percent || liveType?.fee_per_participant || feePerParticipant || 0);
+        const liveFeePerParticipant = Number(
+          livePlatform?.default_price ?? livePlatform?.commission_percent ?? liveType?.fee_per_participant ?? feePerParticipant ?? 0
+        );
 
         if (liveIsFreeTour) {
           const typeFromDb = await loadTourTypeForTour(tour);
           const dbPlatform = tour.platform || getPlatformsForType(typeFromDb)[0] || null;
-          const effectiveFee = Number(dbPlatform?.commission_percent ?? typeFromDb?.fee_per_participant ?? liveFeePerParticipant ?? 0);
+          const effectiveFee = Number(
+            dbPlatform?.default_price ?? dbPlatform?.commission_percent ?? typeFromDb?.fee_per_participant ?? liveFeePerParticipant ?? 0
+          );
           if (!Number.isFinite(effectiveFee) || effectiveFee <= 0) {
             alert("Fee per participant is missing for this free tour.");
             return;

@@ -1300,6 +1300,11 @@ h1 {
   background: #fffdf7;
 }
 
+.platform-inline-price {
+  width: 110px;
+  flex: 0 0 auto;
+}
+
 .modal-section-title {
   margin-top: 6px;
 }

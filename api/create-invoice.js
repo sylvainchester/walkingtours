@@ -87,7 +87,8 @@ function getParticipantEffectiveAmount(participant, fallbackAmount) {
   const direct = Number(participant?.paid_amount);
   if (Number.isFinite(direct) && direct >= 0) return direct;
   const fallback = Number(fallbackAmount);
-  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
+  const groupSize = Math.max(1, Number(participant?.group_size || 1));
+  return Number.isFinite(fallback) && fallback >= 0 ? Number((fallback * groupSize).toFixed(2)) : 0;
 }
 
 function resolveTourTypeForInvoice(tour, types, platformName) {
@@ -113,14 +114,14 @@ function resolveTourTypeForInvoice(tour, types, platformName) {
 
 function resolveInvoicePlatform(tour, type, platformName) {
   const normalizedPlatformName = normalizeName(platformName);
-  const tourPlatform = tour?.platform;
-  if (normalizeName(tourPlatform?.name) === normalizedPlatformName) {
-    return tourPlatform;
-  }
-
-  return (Array.isArray(type?.platforms) ? type.platforms : []).find(
+  const currentPlatform = (Array.isArray(type?.platforms) ? type.platforms : []).find(
     (platform) => normalizeName(platform?.name) === normalizedPlatformName
-  ) || null;
+  );
+  if (currentPlatform) return currentPlatform;
+
+  const tourPlatform = tour?.platform;
+  if (normalizeName(tourPlatform?.name) === normalizedPlatformName) return tourPlatform;
+  return null;
 }
 
 module.exports = async (req, res) => {
@@ -204,9 +205,11 @@ module.exports = async (req, res) => {
       const participantCount = arrivedParticipants.reduce((sum, participant) => sum + Number(participant.group_size || 0), 0);
       if (participantCount <= 0) continue;
 
-      const fallbackUnitPrice = Number(tour.price_per_person ?? type.ticket_price ?? 0);
+      const fallbackUnitPrice = Number(
+        tour.price_per_person ?? matchedPlatform.default_price ?? type.ticket_price ?? 0
+      );
       const gross = arrivedParticipants.reduce(
-        (sum, participant) => sum + (Number(participant.group_size || 0) * getParticipantEffectiveAmount(participant, fallbackUnitPrice)),
+        (sum, participant) => sum + getParticipantEffectiveAmount(participant, fallbackUnitPrice),
         0
       );
       const commissionPct = Number(matchedPlatform.commission_percent || 0);
