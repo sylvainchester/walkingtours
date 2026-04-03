@@ -22,8 +22,7 @@ function money(value) {
 
 function computeInvoicePersons(participants) {
   if (!participants || participants.length === 0) return 0;
-  const arrived = participants.filter((p) => p.attendance_status === "arrived");
-  return arrived.reduce((sum, p) => sum + Number(p.group_size || 0), 0);
+  return participants.reduce((sum, p) => sum + Number(p.group_size || 0), 0);
 }
 
 function getParticipantEffectiveAmount(participant, fallbackAmount) {
@@ -36,7 +35,6 @@ function getParticipantEffectiveAmount(participant, fallbackAmount) {
 
 function computeParticipantsGross(participants, fallbackAmount) {
   return (participants || [])
-    .filter((participant) => participant.attendance_status === "arrived")
     .reduce(
       (sum, participant) => sum + getParticipantEffectiveAmount(participant, fallbackAmount),
       0
@@ -46,7 +44,6 @@ function computeParticipantsGross(participants, fallbackAmount) {
 function getUnitPriceLabel(participants, fallbackAmount) {
   const amounts = Array.from(new Set(
     (participants || [])
-      .filter((participant) => participant.attendance_status === "arrived")
       .map((participant) => {
         const groupSize = Math.max(1, Number(participant.group_size || 1));
         const totalAmount = getParticipantEffectiveAmount(participant, fallbackAmount);
@@ -137,13 +134,6 @@ module.exports = async (req, res) => {
     }
     if (tour.status !== "accepted") {
       return json(res, 400, { ok: false, error: "Tour must be accepted" });
-    }
-
-    const unresolved = (tour.participants || []).filter(
-      (p) => p.attendance_status !== "arrived" && p.attendance_status !== "absent"
-    );
-    if (unresolved.length > 0) {
-      return json(res, 400, { ok: false, error: "Participants statuses are not finalized" });
     }
 
     const [profileRes, typeRes] = await Promise.all([

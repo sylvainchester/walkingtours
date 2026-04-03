@@ -166,7 +166,6 @@ module.exports = async (req, res) => {
         .from("tours")
         .select("id,date,start_time,end_time,type,guide_id,price_per_person,participants_locked,participants(platform_name,group_size,attendance_status,paid_amount,booked_at)")
         .in("guide_id", guideIds)
-        .eq("participants_locked", true)
         .gte("date", periodStart)
         .lte("date", periodEnd)
         .order("date")
@@ -197,18 +196,17 @@ module.exports = async (req, res) => {
       const matchedPlatform = resolveInvoicePlatform(tour, type, platformName);
       if (!matchedPlatform || matchedPlatform.requires_invoice === false) continue;
 
-      const arrivedParticipants = (tour.participants || []).filter(
+      const platformParticipants = (tour.participants || []).filter(
         (participant) =>
-          participant.attendance_status === "arrived"
-          && normalizeName(participant.platform_name) === normalizeName(platformName)
+          normalizeName(participant.platform_name) === normalizeName(platformName)
       );
-      const participantCount = arrivedParticipants.reduce((sum, participant) => sum + Number(participant.group_size || 0), 0);
+      const participantCount = platformParticipants.reduce((sum, participant) => sum + Number(participant.group_size || 0), 0);
       if (participantCount <= 0) continue;
 
       const fallbackUnitPrice = Number(
         tour.price_per_person ?? matchedPlatform.default_price ?? type.ticket_price ?? 0
       );
-      const gross = arrivedParticipants.reduce(
+      const gross = platformParticipants.reduce(
         (sum, participant) => sum + getParticipantEffectiveAmount(participant, fallbackUnitPrice),
         0
       );
@@ -233,7 +231,7 @@ module.exports = async (req, res) => {
     }
 
     if (!rows.length) {
-      return json(res, 400, { ok: false, error: "No locked tours found for this platform and period" });
+      return json(res, 400, { ok: false, error: "No tours found for this platform and period" });
     }
 
     const invoiceNo = `INV-${platformName.replace(/[^A-Za-z0-9]+/g, "").toUpperCase().slice(0, 10)}-${periodStart.replaceAll("-", "")}-${periodEnd.replaceAll("-", "")}`;
