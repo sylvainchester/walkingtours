@@ -43,6 +43,13 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
 function isMissingImportEmailColumn(error) {
   return /import_email/i.test(String(error?.message || ""));
 }
@@ -105,6 +112,36 @@ function formatImportedParticipant(participant) {
   return `${participant.name} (${participant.group_size})${extras.length ? ` - ${extras.join(" - ")}` : ""}`;
 }
 
+function buildParticipantKey(participant, fallbackPlatformName = null) {
+  return [
+    normalizeName(participant?.name),
+    Number(participant?.group_size || 0),
+    normalizeName(participant?.platform_name || fallbackPlatformName || ""),
+  ].join("|");
+}
+
+function findPotentialDuplicateParticipants(draft) {
+  if (!draft?.matched_tour_id) return [];
+  const tour = toursById.get(draft.matched_tour_id);
+  if (!tour) return [];
+
+  const existingKeys = new Set(
+    (tour.participants || []).map((participant) =>
+      buildParticipantKey(participant, draft.matched_platform_name)
+    )
+  );
+
+  return (Array.isArray(draft.imported_participants) ? draft.imported_participants : [])
+    .filter((participant) => existingKeys.has(buildParticipantKey(participant, draft.matched_platform_name)));
+}
+
+function renderBookingImportBanner(card, text, variant) {
+  const banner = document.createElement("div");
+  banner.className = `booking-import-banner ${variant}`;
+  banner.textContent = text;
+  card.appendChild(banner);
+}
+
 async function refreshDraftsAfterImportCheck() {
   await loadSharedGuides();
   await loadToursIndex();
@@ -156,6 +193,12 @@ function createDraftCard(draft, options = {}) {
   const card = document.createElement("div");
   card.className = "details booking-import-card";
 
+  if (draft.status === "rejected") {
+    renderBookingImportBanner(card, "Rejected import", "is-rejected");
+  } else if (draft.status === "confirmed") {
+    renderBookingImportBanner(card, "Confirmed import", "is-confirmed");
+  }
+
   const title = document.createElement("div");
   title.className = "details-title";
   title.textContent = draft.subject || "Imported email";
@@ -192,12 +235,21 @@ function createDraftCard(draft, options = {}) {
   left.appendChild(leftPlatformLine);
 
   const participants = Array.isArray(draft.imported_participants) ? draft.imported_participants : [];
+  const duplicateParticipants = findPotentialDuplicateParticipants(draft);
   const participantsText = document.createElement("div");
   participantsText.className = "readme-line";
   participantsText.textContent = participants.length
     ? participants.map((participant) => formatImportedParticipant(participant)).join(" · ")
     : "No participants proposed.";
   left.appendChild(participantsText);
+
+  if (duplicateParticipants.length > 0) {
+    renderBookingImportBanner(
+      left,
+      `Possible duplicate on this tour: ${duplicateParticipants.map((participant) => `${participant.name} (${participant.group_size})`).join(", ")} already exist${duplicateParticipants.length === 1 ? "s" : ""}.`,
+      "is-duplicate"
+    );
+  }
 
   card.appendChild(left);
 
@@ -247,6 +299,15 @@ function createDraftCard(draft, options = {}) {
       confirmBtn.textContent = "Confirm import";
       confirmBtn.disabled = locked || participants.length === 0;
       confirmBtn.addEventListener("click", async () => {
+        const duplicateNames = duplicateParticipants
+          .map((participant) => `${participant.name} (${participant.group_size})`)
+          .join(", ");
+        if (
+          duplicateParticipants.length > 0
+          && !confirm(`Possible duplicate participants already exist on this tour: ${duplicateNames}.\n\nConfirm import anyway?`)
+        ) {
+          return;
+        }
         const ok = await reviewDraft(draft.id, "confirm");
         if (ok) {
           setStatus("Import confirmed.");
@@ -347,7 +408,7 @@ async function loadSharedGuides() {
 async function loadToursIndex() {
   const { data } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,guide_id")
+    .select("id,date,start_time,end_time,type,guide_id,participants(name,group_size,platform_name)")
     .in("guide_id", Array.from(sharedGuideIds));
   toursById = new Map((data || []).map((tour) => [tour.id, tour]));
 }

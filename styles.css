@@ -738,6 +738,33 @@ h1 {
   gap: 10px;
 }
 
+.booking-import-banner {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+.booking-import-banner.is-duplicate {
+  border-color: rgba(180, 83, 9, 0.24);
+  background: #fff1d6;
+  color: #9a3412;
+}
+
+.booking-import-banner.is-rejected {
+  border-color: rgba(180, 56, 24, 0.24);
+  background: #fbe3da;
+  color: #9f1239;
+}
+
+.booking-import-banner.is-confirmed {
+  border-color: rgba(0, 128, 0, 0.18);
+  background: #dff4df;
+  color: #166534;
+}
+
 .booking-imports-shell {
   display: grid;
   gap: 10px;
