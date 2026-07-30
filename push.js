@@ -15,8 +15,17 @@ export async function ensurePushSubscription(supabase, session) {
   if (!VAPID_PUBLIC_KEY || !session) return;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
 
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return;
+  // The service worker is deliberately disabled during local development.
+  // Waiting for navigator.serviceWorker.ready without a registration never
+  // resolves and prevents the rest of each page from loading.
+  const isLocalHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(
+    window.location.hostname
+  );
+  if (isLocalHost) return;
+
+  // Browsers only allow permission prompts after an explicit user gesture.
+  // Page initialization must never trigger or wait for that prompt.
+  if (Notification.permission !== "granted") return;
 
   const reg = await navigator.serviceWorker.ready;
   let sub = await reg.pushManager.getSubscription();

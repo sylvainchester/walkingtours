@@ -3,7 +3,7 @@
   "private": true,
   "dependencies": {
     "@sparticuz/chromium": "latest",
-    "@supabase/supabase-js": "^2.49.1",
+    "@supabase/supabase-js": "^2.111.0",
     "googleapis": "^171.4.0",
     "puppeteer-core": "^24.4.0",
     "web-push": "^3.6.7"

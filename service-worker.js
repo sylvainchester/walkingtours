@@ -1,4 +1,4 @@
-const CACHE_NAME = "walkingtours-v34";
+const CACHE_NAME = "walkingtours-v36";
 const ASSETS = [
   "./",
   "./index.html",
@@ -30,6 +30,8 @@ const ASSETS = [
   "./readme.js",
   "./sw-register.js",
   "./push.js",
+  "./supabase-client.js",
+  "./vendor/supabase.js",
   "./config.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
