@@ -237,7 +237,7 @@ async function loadTours() {
   const guideIds = Array.from(sharedGuideIds);
   const { data, error } = await supabase
     .from("tours")
-    .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status,paid_amount,booked_at),guide_id,created_by,status,participants_locked")
+    .select("id,date,start_time,end_time,type,platform,is_private,multiple_guides,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status,paid_amount,booked_at),guide_id,created_by,status,participants_locked")
     .in("guide_id", guideIds)
     .gte("date", getTodayISO())
     .order("date")
@@ -300,9 +300,9 @@ function renderSummaryList() {
     const row = document.createElement("button");
     row.type = "button";
     const profile = sharedGuideProfiles.get(tour.guide_id);
-    const guideName = profile
-      ? `${profile.first_name} ${profile.last_name}`
-      : "Unknown";
+    const guideName = tour.multiple_guides
+      ? "Multiple Guides"
+      : (profile ? `${profile.first_name} ${profile.last_name}` : "Unknown");
     const isPrivate = isPrivateForViewer(tour);
     const tourIsPast = tour.date < getTodayISO();
     const acceptedColorClass = tour.status === "accepted" ? ` ${getGuideColorClass(tour.guide_id)}` : "";
@@ -458,14 +458,18 @@ async function saveTourGuideChange(tour, nextGuideId, currentGuideName) {
 
   const { data: conflicts, error: conflictError } = await supabase
     .from("tours")
-    .select("id")
-    .eq("guide_id", nextGuideId)
+    .select("id,guide_id,multiple_guides")
+    .in("guide_id", Array.from(sharedGuideIds))
     .eq("date", tour.date)
     .neq("id", tour.id)
     .lte("start_time", tour.end_time)
     .gte("end_time", tour.start_time);
   if (conflictError) throw new Error(`Conflict check error: ${conflictError.message}`);
-  if (conflicts && conflicts.length > 0) throw new Error("This guide already has another tour at the same time.");
+  if ((conflicts || []).some(
+    (conflict) => conflict.multiple_guides === true || conflict.guide_id === nextGuideId
+  )) {
+    throw new Error("This guide already has another tour at the same time.");
+  }
 
   const previousGuideId = tour.guide_id;
   const nextGuideProfile = sharedGuideProfiles.get(nextGuideId);
@@ -475,7 +479,7 @@ async function saveTourGuideChange(tour, nextGuideId, currentGuideName) {
 
   const { error } = await supabase
     .from("tours")
-    .update({ guide_id: nextGuideId, status: nextStatus })
+    .update({ guide_id: nextGuideId, multiple_guides: false, status: nextStatus })
     .eq("id", tour.id);
   if (error) throw new Error(`Guide update error: ${error.message}`);
 
@@ -590,7 +594,7 @@ async function renderTourModal(tour) {
     saveGuideBtn.textContent = "Save guide";
     saveGuideBtn.addEventListener("click", async () => {
       const nextGuideId = guideSelect.value;
-      if (!nextGuideId || nextGuideId === tour.guide_id) return;
+      if (!nextGuideId || (!tour.multiple_guides && nextGuideId === tour.guide_id)) return;
       try {
         await saveTourGuideChange(tour, nextGuideId, guideName);
         await loadTours();
@@ -1149,7 +1153,7 @@ async function handleBulkSave() {
     const isCreator = tour.created_by === session.user.id;
     const canEditTourGuide = !isPast && !isLocked && !isPrivate;
     let skipReason = "";
-    if (tour.guide_id === nextGuideId) {
+    if (!tour.multiple_guides && tour.guide_id === nextGuideId) {
       skipReason = "already assigned to this guide";
     } else if (isPast) {
       skipReason = "past tour";

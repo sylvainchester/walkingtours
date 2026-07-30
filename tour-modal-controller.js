@@ -93,35 +93,83 @@ export function createTourModalController(options) {
 
   async function saveTourGuideChange(tour, nextGuideId, currentGuideName) {
     const session = getSession();
+    const sharedGuideIds = getSharedGuideIds();
     const shareValidationByGuideId = getShareValidationByGuideId();
     const sharedGuideProfiles = getSharedGuideProfiles();
+    const isMultipleGuides = nextGuideId === "multiple";
+    const targetGuideId = isMultipleGuides ? tour.guide_id : nextGuideId;
     const validationRequired = nextGuideId === session.user.id
       ? false
       : (shareValidationByGuideId.get(nextGuideId) ?? true);
-    const nextStatus = nextGuideId === session.user.id || !validationRequired ? "accepted" : "pending";
+    const nextStatus = isMultipleGuides || nextGuideId === session.user.id || !validationRequired
+      ? "accepted"
+      : "pending";
+
+    if (isMultipleGuides) {
+      const { data: unavailableGuides, error: availabilityError } = await supabase
+        .from("guide_availability")
+        .select("guide_id")
+        .in("guide_id", Array.from(sharedGuideIds))
+        .eq("date", tour.date)
+        .eq("available", false);
+      if (availabilityError) {
+        throw new Error(`Availability check error: ${availabilityError.message}`);
+      }
+      if ((unavailableGuides || []).length > 0) {
+        throw new Error("At least one shared guide is unavailable on this date.");
+      }
+    }
 
     const { data: conflicts, error: conflictError } = await supabase
       .from("tours")
-      .select("id")
-      .eq("guide_id", nextGuideId)
+      .select("id,guide_id,multiple_guides")
+      .in("guide_id", Array.from(sharedGuideIds))
       .eq("date", tour.date)
       .neq("id", tour.id)
       .lte("start_time", tour.end_time)
       .gte("end_time", tour.start_time);
     if (conflictError) throw new Error(`Conflict check error: ${conflictError.message}`);
-    if (conflicts && conflicts.length > 0) throw new Error("This guide already has another tour at the same time.");
+    const relevantConflicts = (conflicts || []).filter(
+      (conflict) => conflict.multiple_guides === true
+        || isMultipleGuides
+        || conflict.guide_id === targetGuideId
+    );
+    if (relevantConflicts.length > 0) {
+      throw new Error(
+        isMultipleGuides
+          ? "At least one shared guide already has another tour at the same time."
+          : "This guide already has another tour at the same time."
+      );
+    }
 
     const previousGuideId = tour.guide_id;
-    const nextGuideProfile = sharedGuideProfiles.get(nextGuideId);
+    const nextGuideProfile = sharedGuideProfiles.get(targetGuideId);
     const nextGuideName = nextGuideProfile
       ? `${nextGuideProfile.first_name} ${nextGuideProfile.last_name}`
       : "Unknown";
 
     const { error } = await supabase
       .from("tours")
-      .update({ guide_id: nextGuideId, status: nextStatus })
+      .update({
+        guide_id: targetGuideId,
+        multiple_guides: isMultipleGuides,
+        status: nextStatus,
+      })
       .eq("id", tour.id);
     if (error) throw new Error(`Guide update error: ${error.message}`);
+
+    if (isMultipleGuides) {
+      for (const guideId of sharedGuideIds) {
+        if (guideId === session.user.id) continue;
+        await sendPush(supabase, {
+          to_user_id: guideId,
+          title: "Multiple Guides tour",
+          body: `A tour on ${tour.date} is now assigned to all shared guides.`,
+          data: { url: pageUrl },
+        });
+      }
+      return;
+    }
 
     if (previousGuideId !== session.user.id) {
       await sendPush(supabase, {
@@ -169,9 +217,9 @@ export function createTourModalController(options) {
     const tourTypes = getTourTypes();
 
     const profile = sharedGuideProfiles.get(tour.guide_id);
-    const guideName = profile
-      ? `${profile.first_name} ${profile.last_name}`
-      : "Unknown";
+    const guideName = tour.multiple_guides
+      ? "Multiple Guides"
+      : (profile ? `${profile.first_name} ${profile.last_name}` : "Unknown");
     const isPast = tour.date < getTodayISO();
     const isPrivate = isPrivateForViewer(tour);
 
@@ -241,6 +289,11 @@ export function createTourModalController(options) {
 
       const guideSelect = document.createElement("select");
       guideSelect.className = "select";
+      const multipleOption = document.createElement("option");
+      multipleOption.value = "multiple";
+      multipleOption.textContent = "Multiple Guides";
+      multipleOption.selected = tour.multiple_guides === true;
+      guideSelect.appendChild(multipleOption);
       Array.from(sharedGuideIds).forEach((guideId) => {
         const option = document.createElement("option");
         const guideProfile = sharedGuideProfiles.get(guideId);
@@ -248,7 +301,7 @@ export function createTourModalController(options) {
         option.textContent = guideProfile
           ? `${guideProfile.first_name} ${guideProfile.last_name}`
           : guideId;
-        if (guideId === tour.guide_id) option.selected = true;
+        if (!tour.multiple_guides && guideId === tour.guide_id) option.selected = true;
         guideSelect.appendChild(option);
       });
       guideRow.appendChild(guideSelect);
@@ -259,7 +312,10 @@ export function createTourModalController(options) {
       saveGuideBtn.textContent = "Save guide";
       saveGuideBtn.addEventListener("click", async () => {
         const nextGuideId = guideSelect.value;
-        if (!nextGuideId || nextGuideId === tour.guide_id) return;
+        const unchanged = nextGuideId === "multiple"
+          ? tour.multiple_guides === true
+          : !tour.multiple_guides && nextGuideId === tour.guide_id;
+        if (!nextGuideId || unchanged) return;
         try {
           await saveTourGuideChange(tour, nextGuideId, guideName);
           await reloadData();

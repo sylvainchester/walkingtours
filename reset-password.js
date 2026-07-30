@@ -7,9 +7,20 @@ const newPassword = document.getElementById("newPassword");
 const confirmPassword = document.getElementById("confirmPassword");
 const updatePasswordBtn = document.getElementById("updatePasswordBtn");
 const authStatus = document.getElementById("authStatus");
+const recoveryEmail = document.getElementById("recoveryEmail");
 
 function setStatus(message) {
   if (authStatus) authStatus.textContent = message || "";
+}
+
+async function showRecoveryEmail() {
+  const { data, error } = await supabase.auth.getUser();
+  const email = data?.user?.email;
+  if (recoveryEmail) {
+    recoveryEmail.textContent = !error && email
+      ? `Password will be changed for: ${email}`
+      : "";
+  }
 }
 
 async function restoreRecoverySession() {
@@ -69,5 +80,7 @@ updatePasswordBtn?.addEventListener("click", handleUpdatePassword);
 restoreRecoverySession().then((ok) => {
   if (!ok) {
     setStatus("Invalid or expired recovery link. Request a new password reset.");
+    return;
   }
+  showRecoveryEmail();
 });

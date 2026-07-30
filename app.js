@@ -4,7 +4,18 @@ import { ensurePushSubscription, sendPush } from "./push.js";
 import { createTourModalController } from "./tour-modal-controller.js";
 import { applyAcceptedTourStyle } from "./tour-colors.js";
 
+const initialHashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+if (initialHashParams.get("type") === "recovery") {
+  window.location.replace(`reset-password.html${window.location.hash}`);
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+supabase.auth.onAuthStateChange((event) => {
+  if (event === "PASSWORD_RECOVERY") {
+    window.location.replace("reset-password.html");
+  }
+});
 
 const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const GUIDE_COLOR_CLASSES = [
@@ -207,7 +218,9 @@ function getAcceptedToursTypeHint(tours) {
 function getVisibleToursForDate(iso) {
   const allTours = monthTours.filter((tour) => tour.date === iso);
   if (showAllTours) return allTours;
-  return allTours.filter((tour) => tour.guide_id === selectedGuideId);
+  return allTours.filter(
+    (tour) => tour.multiple_guides === true || tour.guide_id === selectedGuideId
+  );
 }
 
 function getAvailableGuideIdsForDate(iso) {
@@ -374,7 +387,7 @@ async function loadMonthTours() {
   const [toursResponse, availabilityResponse] = await Promise.all([
     supabase
       .from("tours")
-      .select("id,date,start_time,end_time,type,platform,is_private,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status,paid_amount,booked_at),guide_id,created_by,status,participants_locked")
+      .select("id,date,start_time,end_time,type,platform,is_private,multiple_guides,invoice_path,free_amount_received,platform_due_amount,price_per_person,source_tour_type_id,participants(id,name,group_size,platform_name,attendance_status,paid_amount,booked_at),guide_id,created_by,status,participants_locked")
       .gte("date", start)
       .lte("date", end)
       .in("guide_id", guideIds)
@@ -514,7 +527,9 @@ function getPlatformsForType(type) {
 
 function renderTourItem(tour) {
   const profile = sharedGuideProfiles.get(tour.guide_id);
-  const guideName = profile ? `${profile.first_name} ${profile.last_name}` : "Unknown";
+  const guideName = tour.multiple_guides
+    ? "Multiple Guides"
+    : (profile ? `${profile.first_name} ${profile.last_name}` : "Unknown");
   const isPrivate = isPrivateForViewer(tour);
   const tourIsPast = tour.date < getTodayISO();
   const row = document.createElement("button");
@@ -642,13 +657,16 @@ async function renderSelectedDay() {
 
     const { data: conflicts } = await supabase
       .from("tours")
-      .select("id")
-      .eq("guide_id", selectedGuide)
+      .select("id,guide_id,multiple_guides")
+      .in("guide_id", Array.from(sharedGuideIds))
       .eq("date", selectedDate)
       .eq("status", "accepted")
       .lte("start_time", endValue)
       .gte("end_time", startInput.value);
-    if (conflicts && conflicts.length > 0) {
+    const selectedGuideConflicts = (conflicts || []).filter(
+      (tour) => tour.multiple_guides === true || tour.guide_id === selectedGuide
+    );
+    if (selectedGuideConflicts.length > 0) {
       alert("Time conflict with another accepted tour.");
       return;
     }
