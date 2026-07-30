@@ -476,8 +476,10 @@ function renderCalendar() {
     if (tours.length) {
       const indicator = document.createElement("div");
       const hasPending = tours.some((tour) => tour.status === "pending");
+      const hasMultipleGuides = tours.some((tour) => tour.multiple_guides === true);
       const acceptedColorClass = getAcceptedToursColorClass(tours);
       indicator.className = `tour-indicator ${hasPending ? "pending" : `accepted ${acceptedColorClass}`}`;
+      if (hasMultipleGuides) indicator.classList.add("multiple-guides");
       if (!hasPending) {
         applyAcceptedTourStyle(indicator, {
           guideColorClass: acceptedColorClass,
@@ -535,7 +537,8 @@ function renderTourItem(tour) {
   const row = document.createElement("button");
   const acceptedColorClass = tour.status === "accepted" ? ` ${getGuideColorClass(tour.guide_id)}` : "";
   const pastClass = tour.status === "pending" && tourIsPast ? " past" : "";
-  row.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${pastClass}`;
+  const multipleGuidesClass = tour.multiple_guides ? " multiple-guides" : "";
+  row.className = `tour-row ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${pastClass}${multipleGuidesClass}`;
   if (tour.status === "accepted") {
     applyAcceptedTourStyle(row, {
       guideColorClass: getGuideColorClass(tour.guide_id),

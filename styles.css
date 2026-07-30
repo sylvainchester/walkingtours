@@ -670,6 +670,11 @@ h1 {
   color: #1a1a1a;
 }
 
+.tour-indicator.multiple-guides,
+.tour-row.multiple-guides {
+  border: 3px solid #d60000 !important;
+}
+
 .details {
   background: var(--card);
   border: 1px solid var(--cell-border);

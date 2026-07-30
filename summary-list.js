@@ -307,7 +307,8 @@ function renderSummaryList() {
     const tourIsPast = tour.date < getTodayISO();
     const acceptedColorClass = tour.status === "accepted" ? ` ${getGuideColorClass(tour.guide_id)}` : "";
     const pastClass = tour.status === "pending" && tourIsPast ? " past" : "";
-    row.className = `tour-row summary-row-main ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${pastClass}`;
+    const multipleGuidesClass = tour.multiple_guides ? " multiple-guides" : "";
+    row.className = `tour-row summary-row-main ${tour.status === "pending" ? "pending" : "accepted"}${acceptedColorClass}${pastClass}${multipleGuidesClass}`;
     if (tour.status === "accepted") {
       applyAcceptedTourStyle(row, {
         guideColorClass: getGuideColorClass(tour.guide_id),
