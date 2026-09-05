@@ -95,7 +95,7 @@ function dedupeNormalizedLines(text) {
   });
 }
 
-function trimQuotedContent(text) {
+function trimReplyContent(text) {
   const lines = String(text || "").split("\n");
   const kept = [];
 
@@ -106,11 +106,9 @@ function trimQuotedContent(text) {
       continue;
     }
 
-    if (
-      /^-{2,}\s*forwarded message\s*-{2,}$/i.test(line)
-      || /^begin forwarded message:?$/i.test(line)
-      || /^on .+ wrote:$/i.test(line)
-    ) {
+    // A forwarded booking contains the useful reservation after its forwarding
+    // marker. Only drop quoted reply threads, not forwarded messages.
+    if (/^on .+ wrote:$/i.test(line)) {
       break;
     }
 
@@ -132,11 +130,15 @@ function cleanForwardHeaders(text) {
 }
 
 function buildMessageText(subject, parts) {
-  const preferredBody = parts.text.length
-    ? parts.text.join("\n\n")
-    : parts.html.map(stripHtml).join("\n\n");
-  const trimmed = cleanForwardHeaders(trimQuotedContent(preferredBody));
-  return dedupeNormalizedLines([subject, trimmed].filter(Boolean).join("\n\n")).join("\n");
+  const bodyCandidates = [
+    parts.text.join("\n\n"),
+    parts.html.map(stripHtml).join("\n\n"),
+  ]
+    .map((body) => cleanForwardHeaders(trimReplyContent(body)))
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+
+  return dedupeNormalizedLines([subject, bodyCandidates[0] || ""].filter(Boolean).join("\n\n")).join("\n");
 }
 
 function parseTimes(text) {
